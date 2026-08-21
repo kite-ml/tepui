@@ -102,7 +102,7 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
     paths?: { workspace_root: string };
     provider?: { id: string; api: string; base_url: string; api_key_env: string; tier?: string };
     tiers: Record<string, string>;
-    employees: Record<string, { archetype: string; name: string; model?: string; slack_channels?: string[]; credentials?: string[] }>;
+    employees: Record<string, { archetype: string; name: string; model?: string; slack_account?: string; slack_channels?: string[]; credentials?: string[] }>;
     loops: Record<string, { enabled: boolean }>;
   }>(join(companyDir, "org.overlay.yaml"));
 
@@ -258,18 +258,59 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
   // requireMention so the agent does not respond to every message in a shared
   // channel — in a workspace with humans that is the difference between a
   // colleague and a nuisance.
+  // Two routing dimensions, and they compose:
+  //
+  //   slack_account  -> a DEDICATED Slack app, so the agent has its own
+  //                     @handle. This is the only way to @ an individual agent,
+  //                     because in Slack one app == one bot user == one handle.
+  //                     It also makes the capability boundary visible: you
+  //                     invite @tepui-marketing only to channels where
+  //                     marketing should operate, so Slack channel membership
+  //                     becomes an access-control layer matching the org chart.
+  //
+  //   slack_channels -> channel-scoped routing on a SHARED app. Cheaper to set
+  //                     up (one app, two tokens) but you address the app, not
+  //                     the agent.
   const bindings: any[] = [];
   const slackChannels: Record<string, any> = {};
+  const slackAccounts: Record<string, any> = {};
+
   for (const [id, emp] of Object.entries(overlay.employees)) {
+    const account = emp.slack_account;
+
+    if (account) {
+      if (!/^[a-z0-9][a-z0-9_-]*$/.test(account)) {
+        fail(`employee '${id}' has slack_account '${account}' — use a lowercase slug; it names env vars`);
+        continue;
+      }
+      const up = account.toUpperCase().replace(/-/g, "_");
+      slackAccounts[account] = {
+        botToken: { source: "env", provider: "default", id: `SLACK_BOT_TOKEN_${up}` },
+        appToken: { source: "env", provider: "default", id: `SLACK_APP_TOKEN_${up}` },
+      };
+      // Account-scoped: this agent answers to its own handle anywhere it is invited.
+      bindings.push({ agentId: id, comment: `slack app '${account}' -> ${id}`, match: { channel: "slack", accountId: account } });
+    }
+
     for (const ch of emp.slack_channels ?? []) {
       if (!/^C[A-Z0-9]+$/.test(ch)) {
         fail(`employee '${id}' has slack channel '${ch}' — use the immutable channel ID (C...), not the name`);
         continue;
       }
-      bindings.push({ agentId: id, comment: `#${ch} -> ${id}`, match: { channel: "slack", peer: { kind: "channel", id: ch } } });
+      // Channel rules are narrower than account rules, so they are emitted
+      // first: within a tier, config order wins.
+      bindings.unshift({
+        agentId: id, comment: `#${ch} -> ${id}`,
+        match: { channel: "slack", ...(account ? { accountId: account } : {}), peer: { kind: "channel", id: ch } },
+      });
       slackChannels[ch] = { enabled: true, requireMention: true };
     }
   }
+
+  // An agent with neither is unreachable from Slack — usually a mistake worth
+  // surfacing, but never fatal (intake is reached by delegation, not directly).
+  const reachable = new Set(bindings.map((b) => b.agentId));
+  const unreachable = Object.keys(overlay.employees).filter((id) => !reachable.has(id));
 
   if (failures.length) throw new CompileError(failures);
 
@@ -294,6 +335,21 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
   }, src);
   emit(join(outDir, "skills.json5"), { entries: skills }, src);
   emit(join(outDir, "bindings.json5"), bindings, src);
+  if (Object.keys(slackAccounts).length || Object.keys(slackChannels).length) {
+    emit(join(outDir, "channels.json5"), {
+      slack: {
+        enabled: true,
+        mode: "socket",
+        // Socket Mode: an OUTBOUND websocket per account. No public URL, no
+        // ingress, works behind NAT — a laptop, a zero-ingress VM and a Mac
+        // mini all behave identically.
+        dmPolicy: "pairing",
+        unfurlLinks: false,     // do not fetch attacker-supplied URLs
+        ...(Object.keys(slackAccounts).length ? { accounts: slackAccounts } : {}),
+        ...(Object.keys(slackChannels).length ? { channels: slackChannels } : {}),
+      },
+    }, src);
+  }
 
   // Provider + model catalogue. The API KEY is never emitted — only a ${VAR}
   // reference that the runtime resolves from the gitignored .env. Costs are
@@ -317,7 +373,7 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
   }
   emit(join(outDir, "budgets.json"), { perLoop: Object.fromEntries(Object.entries<any>(loops).map(([n, p]) => [n, p.budget])), perAgent: budgets }, src);
 
-  return { agents: Object.keys(agents).length, loops: Object.keys(loops).length };
+  return { agents: Object.keys(agents).length, loops: Object.keys(loops).length, slackAccounts: Object.keys(slackAccounts).length, unreachable };
 }
 
 export { CompileError };
@@ -332,7 +388,8 @@ const companyDir = resolve(args.find((a) => !a.startsWith("--")) ?? "../tepui-co
 const flag = (n: string) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : undefined; };
 try {
   const r = compile(companyDir, { workspaceRoot: flag("workspace-root"), outDir: flag("out") });
-  console.log(`compiled ${r.agents} agents, ${r.loops} loops -> ${companyDir}/generated/`);
+  console.log(`compiled ${r.agents} agents, ${r.loops} loops` + (r.slackAccounts ? `, ${r.slackAccounts} slack app(s)` : "") + ` -> ${companyDir}/generated/`);
+  if (r.unreachable.length) console.log(`  note: not reachable from Slack (delegation only): ${r.unreachable.join(", ")}`);
 } catch (e) {
   if (e instanceof CompileError) {
     console.error(`\ncompile FAILED — refusing to emit:\n`);

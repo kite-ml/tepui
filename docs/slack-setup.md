@@ -2,6 +2,14 @@
 
 Slack is the human interface to tepui: you talk to `ops` in a channel, and `ops` delegates. This is the runbook for the parts only a human can do.
 
+## One app per agent
+
+You address agents individually — `@tepui-ops`, `@tepui-analyst`, `@tepui-marketing` — and that requires **one Slack app per agent**, because in Slack one app is one bot user is one `@handle`. OpenClaw supports this through `channels.slack.accounts.*`, with each account opening its own Socket Mode connection, and `bindings` routing on `accountId`.
+
+This costs more setup (three apps, six tokens) but buys something beyond ergonomics: **Slack channel membership becomes an access-control layer that mirrors the org chart.** Invite `@tepui-marketing` only where marketing should operate, and the capability boundary is visible in the UI rather than buried in `org.yaml`.
+
+`intake` deliberately gets **no** Slack app. It is the quarantine agent, reached by delegation from `ops` — making it directly addressable would hand anyone a channel straight into the agent designed to absorb hostile text.
+
 **Socket Mode, not Events API.** Socket Mode opens an *outbound* WebSocket to Slack, so the gateway needs **no public URL, no DNS, no TLS, no reverse proxy, and no inbound firewall rule.** That is what lets the same config run on a laptop, a GCP VM with zero ingress, and a Mac mini behind home NAT — which is the whole portability requirement.
 
 ---
@@ -44,24 +52,26 @@ In Slack: right-click a channel → **View channel details** → the ID is at th
 
 ## 4. Wire it up
 
-Put the tokens in the gitignored `.env` (never in git):
+Run the helper once per agent — it prompts hidden, verifies against Slack, and writes to the gitignored `.env`:
 
 ```bash
-SLACK_BOT_TOKEN=xoxb-...
-SLACK_APP_TOKEN=xapp-...
+./deploy/slack/finish-setup.sh ops
+./deploy/slack/finish-setup.sh analyst
+./deploy/slack/finish-setup.sh marketing
 ```
 
-Put the channel IDs in `tepui-company/org.overlay.yaml`:
+Each agent's tokens land as `SLACK_BOT_TOKEN_OPS` / `SLACK_APP_TOKEN_OPS` and so on, matching the `slack_account` value in `org.overlay.yaml`. Then `pnpm compile`.
+
+**Optionally pin an agent to specific channels** by adding IDs alongside its account:
 
 ```yaml
 employees:
-  ops:
-    slack_channels: ["C0ABC123OPS"]
   analyst:
-    slack_channels: ["C0DEF456ANALYTICS"]
+    slack_account: analyst
+    slack_channels: ["C0DEF456ANALYTICS"]   # only answers here
 ```
 
-Then `pnpm compile`. The compiler emits `bindings.json5` routing each channel to its agent, and sets `requireMention: true` on every bound channel.
+Without `slack_channels`, an agent answers wherever its app is invited. The compiler emits `bindings.json5` routing each channel to its agent, and sets `requireMention: true` on every bound channel.
 
 **`requireMention` is deliberate.** In a shared workspace an agent that replies to every message is a nuisance, not a colleague. You address it explicitly: `@ops what did we spend yesterday?`
 

@@ -7,14 +7,24 @@
 # Socket Mode means the gateway opens an OUTBOUND WebSocket to Slack. No public
 # URL, no DNS, no TLS, no inbound firewall rule — which is exactly why the same
 # config runs on a laptop, a zero-ingress VM, and a Mac mini behind home NAT.
+# ⚠️ ONE APP PER AGENT. In Slack, one app == one bot user == one @handle, so
+# each individually-addressable agent needs its own app. Create this manifest
+# once per agent, changing ONLY the three AGENT lines below:
+#
+#   ops        -> @tepui-ops        the chief of staff, delegates to the rest
+#   analyst    -> @tepui-analyst    read-only analytics
+#   marketing  -> @tepui-marketing  drafts only, never publishes
+#
+# intake gets NO Slack app on purpose. It is the quarantine agent, reached by
+# delegation from ops — it should not be a surface anyone can hand text to.
 display_information:
-  name: tepui
-  description: Company OS — ops, analyst, marketing and intake agents
+  name: tepui-ops                                    # AGENT
+  description: Company OS — chief of staff           # AGENT
   background_color: "#1f2d3d"
 
 features:
   bot_user:
-    display_name: tepui
+    display_name: tepui-ops                          # AGENT
     always_online: true
 
 oauth_config:
