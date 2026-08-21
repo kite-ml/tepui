@@ -110,3 +110,18 @@ test("the worked model from docs/cost.md still holds", () => {
   assert.ok(Math.abs(haikuCached - 0.0226) < 0.0001, `haiku cached ${haikuCached}`);
   assert.ok(opusCached / haikuCached > 4.9, "the 5x tier gap must survive caching");
 });
+
+test("Nemotron is dramatically cheaper than the Anthropic tiers", () => {
+  const u = { inputTokens: 1_000_000, outputTokens: 1_000_000 };
+  const haiku = costMicros("anthropic/claude-haiku-4-5", u);
+  const nano  = costMicros("nvidia/nemotron-3-nano-30b-a3b", u);
+  const ultra = costMicros("nvidia/nemotron-3-ultra-550b-a55b", u);
+  const sonnet = costMicros("anthropic/claude-sonnet-5", u);
+  assert.ok(nano < haiku / 20, `nano ${nano} should be >20x cheaper than haiku ${haiku}`);
+  assert.ok(ultra < sonnet, `ultra ${ultra} should undercut sonnet ${sonnet}`);
+});
+
+test("an unpriced Nemotron variant still fails closed", () => {
+  const g = new BudgetGate(new MemoryStore(), { x: { per_run_usd: 1, per_day_usd: 1 } }, () => "2026-08-21");
+  assert.equal(g.check("x", 100, "nvidia/nemotron-9-imaginary").allow, false);
+});

@@ -67,7 +67,11 @@ const MODEL_CONTEXT: Record<string, number> = {
   "nvidia/nemotron-3-super-120b-a12b": 128_000,
   "nvidia/nemotron-3-nano-30b-a3b": 128_000,
 };
-const MODEL_COST: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {};
+const MODEL_COST: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
+  "nvidia/nemotron-3-nano-30b-a3b":    { input: 0.05,  output: 0.20, cacheRead: 0.025, cacheWrite: 0.05 },
+  "nvidia/nemotron-3-super-120b-a12b": { input: 0.085, output: 0.40, cacheRead: 0.085, cacheWrite: 0.085 },
+  "nvidia/nemotron-3-ultra-550b-a55b": { input: 0.50,  output: 2.20, cacheRead: 0.10,  cacheWrite: 0.50 },
+};
 
 const PROFILE_MAP: Record<string, { profile: string; deny: string[] }> = {
   ops:        { profile: "full",    deny: [] },
@@ -98,7 +102,7 @@ export function compile(companyDir: string) {
     paths?: { workspace_root: string };
     provider?: { id: string; api: string; base_url: string; api_key_env: string };
     tiers: Record<string, string>;
-    employees: Record<string, { archetype: string; name: string; model?: string; channels?: string[]; credentials?: string[] }>;
+    employees: Record<string, { archetype: string; name: string; model?: string; slack_channels?: string[]; credentials?: string[] }>;
     loops: Record<string, { enabled: boolean }>;
   }>(join(companyDir, "org.overlay.yaml"));
 
@@ -229,6 +233,24 @@ export function compile(companyDir: string) {
     }
   }
 
+  // ---- Slack bindings ----------------------------------------------------
+  // Routing is deterministic and most-specific-first. Every bound channel gets
+  // requireMention so the agent does not respond to every message in a shared
+  // channel — in a workspace with humans that is the difference between a
+  // colleague and a nuisance.
+  const bindings: any[] = [];
+  const slackChannels: Record<string, any> = {};
+  for (const [id, emp] of Object.entries(overlay.employees)) {
+    for (const ch of emp.slack_channels ?? []) {
+      if (!/^C[A-Z0-9]+$/.test(ch)) {
+        fail(`employee '${id}' has slack channel '${ch}' — use the immutable channel ID (C...), not the name`);
+        continue;
+      }
+      bindings.push({ agentId: id, comment: `#${ch} -> ${id}`, match: { channel: "slack", peer: { kind: "channel", id: ch } } });
+      slackChannels[ch] = { enabled: true, requireMention: true };
+    }
+  }
+
   if (failures.length) throw new CompileError(failures);
 
   const outDir = join(companyDir, "generated");
@@ -251,6 +273,7 @@ export function compile(companyDir: string) {
     list: Object.values(agents),
   }, src);
   emit(join(outDir, "skills.json5"), { entries: skills }, src);
+  emit(join(outDir, "bindings.json5"), bindings, src);
 
   // Provider + model catalogue. The API KEY is never emitted — only a ${VAR}
   // reference that the runtime resolves from the gitignored .env. Costs are

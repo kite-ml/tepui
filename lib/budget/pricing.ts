@@ -17,6 +17,18 @@ export const PRICING: Record<string, Pricing> = {
   "anthropic/claude-sonnet-5":   { input: 2,  cacheWrite5m: 2.5,  cacheRead: 0.2,  output: 10 },
   "anthropic/claude-sonnet-4-6": { input: 2,  cacheWrite5m: 2.5,  cacheRead: 0.2,  output: 10 },
   "anthropic/claude-haiku-4-5":  { input: 1,  cacheWrite5m: 1.25, cacheRead: 0.1,  output: 5 },
+
+  // Nemotron 3 (NVIDIA Open Model License). Prices are from third-party hosts
+  // via OpenRouter — NVIDIA does NOT sell these per token on any aggregator,
+  // and integrate.api.nvidia.com is a credit-metered evaluation tier with no
+  // published per-token rate. See docs/providers.md.
+  //
+  // Note how cheap this family is: Nemotron nano is 20x cheaper on input than
+  // Haiku 4.5, and Ultra undercuts Sonnet. The tier ratio here is roughly
+  // 10 : 1.7 : 1 (ultra : super : nano) on input.
+  "nvidia/nemotron-3-nano-30b-a3b":   { input: 0.05,  cacheWrite5m: 0.05,  cacheRead: 0.025, output: 0.20 },
+  "nvidia/nemotron-3-super-120b-a12b":{ input: 0.085, cacheWrite5m: 0.085, cacheRead: 0.085, output: 0.40 },
+  "nvidia/nemotron-3-ultra-550b-a55b":{ input: 0.50,  cacheWrite5m: 0.50,  cacheRead: 0.10,  output: 2.20 },
 };
 
 /** Batch API is a flat 50% off both input and output, and stacks with caching. */
