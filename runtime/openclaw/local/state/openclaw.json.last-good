@@ -14,6 +14,7 @@
   // structurally rather than by convention.
   "agents":  { "$include": "./repos/tepui-company/generated/agents.json5" },
   "skills":  { "$include": "./repos/tepui-company/generated/skills.json5" },
+  "models":  { "$include": "./repos/tepui-company/generated/models.json5" },
 
   "cron": {
     "enabled": true,

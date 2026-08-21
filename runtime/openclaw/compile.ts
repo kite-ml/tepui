@@ -55,6 +55,20 @@ const readYaml = <T,>(p: string): T => parseYaml(readFileSync(p, "utf8")) as T;
  * them here is exactly what the adapter layer is for — org.yaml never learns
  * a runtime's vocabulary.
  */
+/**
+ * Context windows and USD-per-million-token costs for non-Anthropic models.
+ * UNPRICED is deliberately expensive: an unpriced model must never look free
+ * to the budget gate, so it is charged at a rate that will trip a cap early.
+ * Replace these with published figures once confirmed.
+ */
+const UNPRICED = { input: 15, output: 60, cacheRead: 15, cacheWrite: 15 };
+const MODEL_CONTEXT: Record<string, number> = {
+  "nvidia/nemotron-3-ultra-550b-a55b": 128_000,
+  "nvidia/nemotron-3-super-120b-a12b": 128_000,
+  "nvidia/nemotron-3-nano-30b-a3b": 128_000,
+};
+const MODEL_COST: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {};
+
 const PROFILE_MAP: Record<string, { profile: string; deny: string[] }> = {
   ops:        { profile: "full",    deny: [] },
   readonly:   { profile: "minimal", deny: ["write", "edit", "apply_patch", "exec"] },
@@ -81,6 +95,8 @@ export function compile(companyDir: string) {
     join(CORE, "org.yaml"),
   );
   const overlay = readYaml<{
+    paths?: { workspace_root: string };
+    provider?: { id: string; api: string; base_url: string; api_key_env: string };
     tiers: Record<string, string>;
     employees: Record<string, { archetype: string; name: string; model?: string; channels?: string[]; credentials?: string[] }>;
     loops: Record<string, { enabled: boolean }>;
@@ -116,6 +132,9 @@ export function compile(companyDir: string) {
     for (const c of policy.capabilities?.credentials ?? []) set.add(c);
     credentialsNeededBy.set(owner, set);
   }
+
+  const wsRoot = overlay.paths?.workspace_root;
+  if (!wsRoot) fail("org.overlay.yaml must declare paths.workspace_root — the compiler will not guess where agent workspaces live");
 
   // ---- agents ------------------------------------------------------------
   const agents: Record<string, any> = {};
@@ -177,8 +196,8 @@ export function compile(companyDir: string) {
       id,
       name: emp.name,
       identity: { name: emp.name },
-      workspace: `./tepui/agents/${id}`,
-      agentDir: `./tepui/agents/${id}/.agent`,
+      workspace: `${wsRoot}/agents/${id}`,
+      agentDir: `${wsRoot}/agents/${id}/.agent`,
       model,
       utilityModel: utility,
       sandbox: { mode: merged.sandbox?.mode, backend: "docker", workspaceAccess: merged.sandbox?.workspace_access },
@@ -232,6 +251,27 @@ export function compile(companyDir: string) {
     list: Object.values(agents),
   }, src);
   emit(join(outDir, "skills.json5"), { entries: skills }, src);
+
+  // Provider + model catalogue. The API KEY is never emitted — only a ${VAR}
+  // reference that the runtime resolves from the gitignored .env. Costs are
+  // declared here so the runtime's own accounting agrees with lib/budget.
+  if (overlay.provider) {
+    const p = overlay.provider;
+    const modelIds = [...new Set(Object.values(overlay.tiers))];
+    emit(join(outDir, "models.json5"), {
+      providers: {
+        [p.id]: {
+          api: p.api,
+          baseUrl: p.base_url,
+          apiKey: `\${${p.api_key_env}}`,
+          models: modelIds.map((full) => {
+            const id = full.startsWith(`${p.id}/`) ? full.slice(p.id.length + 1) : full;
+            return { id, name: id, contextTokens: MODEL_CONTEXT[full] ?? 128_000, cost: MODEL_COST[full] ?? UNPRICED };
+          }),
+        },
+      },
+    }, src);
+  }
   emit(join(outDir, "budgets.json"), { perLoop: Object.fromEntries(Object.entries<any>(loops).map(([n, p]) => [n, p.budget])), perAgent: budgets }, src);
 
   return { agents: Object.keys(agents).length, loops: Object.keys(loops).length };
