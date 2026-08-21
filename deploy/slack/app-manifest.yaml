@@ -1,0 +1,53 @@
+# tepui Slack app manifest.
+#
+# Paste this at api.slack.com/apps -> Create New App -> From an app manifest.
+# It sets Socket Mode, scopes, and event subscriptions in one step instead of
+# ~20 separate toggles.
+#
+# Socket Mode means the gateway opens an OUTBOUND WebSocket to Slack. No public
+# URL, no DNS, no TLS, no inbound firewall rule — which is exactly why the same
+# config runs on a laptop, a zero-ingress VM, and a Mac mini behind home NAT.
+display_information:
+  name: tepui
+  description: Company OS — ops, analyst, marketing and intake agents
+  background_color: "#1f2d3d"
+
+features:
+  bot_user:
+    display_name: tepui
+    always_online: true
+
+oauth_config:
+  scopes:
+    bot:
+      # --- core messaging ---
+      - app_mentions:read      # see @tepui mentions (requireMention depends on this)
+      - chat:write             # post messages
+      - chat:write.customize   # post as "ops" / "analyst" / "marketing" with distinct icons
+      - commands               # slash commands
+      # --- read the channels it is invited to ---
+      - channels:history
+      - channels:read
+      - groups:history         # private channels
+      - groups:read
+      # --- direct messages ---
+      - im:history
+      - im:read
+      - im:write
+      # --- identity resolution ---
+      - users:read
+      # --- assistant surface ---
+      - assistant:write
+
+settings:
+  # Socket Mode. Requires an App-Level Token with connections:write, which
+  # Slack prompts you to create when you enable it.
+  socket_mode_enabled: true
+  event_subscriptions:
+    bot_events:
+      - app_mention
+      - message.channels
+      - message.groups
+      - message.im
+  org_deploy_enabled: false
+  token_rotation_enabled: false
