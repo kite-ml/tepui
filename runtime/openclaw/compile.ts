@@ -275,8 +275,24 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
   const slackChannels: Record<string, any> = {};
   const slackAccounts: Record<string, any> = {};
 
+  // An employee with slack_channels but no slack_account rides the SHARED
+  // "default" app: one integration for the whole company, and the CHANNEL
+  // decides which agent answers. Cheapest to set up (1 app, 2 tokens); you
+  // address the app rather than the agent.
+  const usesShared = Object.values(overlay.employees).some((e) => !e.slack_account && (e.slack_channels ?? []).length);
+  if (usesShared) {
+    slackAccounts["default"] = {
+      botToken: { source: "env", provider: "default", id: "SLACK_BOT_TOKEN" },
+      appToken: { source: "env", provider: "default", id: "SLACK_APP_TOKEN" },
+    };
+  }
+
   for (const [id, emp] of Object.entries(overlay.employees)) {
     const account = emp.slack_account;
+
+    if (!account && !(emp.slack_channels ?? []).length) {
+      // no Slack surface at all — reported below, never fatal
+    }
 
     if (account) {
       if (!/^[a-z0-9][a-z0-9_-]*$/.test(account)) {

@@ -50,6 +50,29 @@ archetypes:
     # human-invoked script. Capability absence cannot be prompt-injected past.
     budget: { per_run_usd: 1.50, per_day_usd: 8.00 }
 
+  # Visual assets: banners, infographics, social images. Drafts only — the
+  # publishing credential lives with a human-invoked script, never here.
+  designer:
+    title: Designer
+    reports_to: ops
+    sandbox: { mode: all, workspace_access: rw }
+    tools: { profile: authoring, deny: [exec, browser] }
+    # Image generation is priced PER IMAGE, not per token, so the per-run cap
+    # is the meaningful control here — a runaway loop burns money in units the
+    # token budget cannot see.
+    budget: { per_run_usd: 2.00, per_day_usd: 10.00 }
+
+  # Video: assembly, cuts, captions, format conversion. Needs exec for ffmpeg,
+  # which is why it is fully sandboxed with no network reach.
+  video_editor:
+    title: Video Editor
+    reports_to: ops
+    sandbox: { mode: all, workspace_access: rw }
+    tools: { profile: coding, deny: [browser, message] }
+    # Video generation is the most expensive thing in the company by an order
+    # of magnitude. Start deliberately tight and raise it on evidence.
+    budget: { per_run_usd: 4.00, per_day_usd: 15.00 }
+
   engineer:
     title: Engineer
     reports_to: ops

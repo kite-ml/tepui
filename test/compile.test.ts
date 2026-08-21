@@ -6,7 +6,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -210,4 +210,48 @@ test("refuses an evaluation-tier provider serving a loop that handles company da
   try { compile(company); } catch (e: any) { failures = e.failures ?? null; }
   rmSync(root, { recursive: true, force: true });
   assert.ok(failures?.some((f) => f.includes("tier=evaluation")), failures?.join("\n"));
+});
+
+test("shared Slack app: agents route by channel, one integration", async () => {
+  const root = mkdtempSync(join(tmpdir(), "tepui-"));
+  const core = join(root, "core"), company = join(root, "company");
+  mkdirSync(join(core, "loops"), { recursive: true }); mkdirSync(company, { recursive: true });
+  writeFileSync(join(core, "org.yaml"), JSON.stringify({ ...BASE_ORG, archetypes: {
+    a: { title: "A", sandbox: OK_SANDBOX, tools: { profile: "readonly" } },
+    b: { title: "B", sandbox: OK_SANDBOX, tools: { profile: "readonly" } } } }));
+  writeFileSync(join(company, "org.overlay.yaml"), JSON.stringify({ ...BASE_OVERLAY, employees: {
+    a: { archetype: "a", name: "A", slack_channels: ["C0AAA"] },
+    b: { archetype: "b", name: "B", slack_channels: ["C0BBB"] } } }));
+  process.env.TEPUI_CORE = core;
+  const { compile } = await import(`../runtime/openclaw/compile.ts?t=${Date.now()}`);
+  const out = join(company, "generated");
+  compile(company, { outDir: out });
+  const read = (f: string) => { const r = readFileSync(join(out, f), "utf8"); return JSON.parse(r.slice(r.indexOf(r.includes("[\n") && f === "bindings.json5" ? "[" : "{"))); };
+  const ch = read("channels.json5");
+  const bind = read("bindings.json5");
+  rmSync(root, { recursive: true, force: true });
+
+  assert.deepEqual(Object.keys(ch.slack.accounts), ["default"], "one shared integration");
+  assert.equal(bind.length, 2);
+  assert.ok(bind.every((b: any) => b.match.peer), "shared mode routes by channel, not account");
+  assert.ok(!bind.some((b: any) => b.match.accountId), "shared mode must not pin an accountId");
+});
+
+test("per-agent Slack apps: one account each, addressable anywhere", async () => {
+  const root = mkdtempSync(join(tmpdir(), "tepui-"));
+  const core = join(root, "core"), company = join(root, "company");
+  mkdirSync(join(core, "loops"), { recursive: true }); mkdirSync(company, { recursive: true });
+  writeFileSync(join(core, "org.yaml"), JSON.stringify({ ...BASE_ORG, archetypes: {
+    a: { title: "A", sandbox: OK_SANDBOX, tools: { profile: "readonly" } } } }));
+  writeFileSync(join(company, "org.overlay.yaml"), JSON.stringify({ ...BASE_OVERLAY, employees: {
+    a: { archetype: "a", name: "A", slack_account: "agent-a" } } }));
+  process.env.TEPUI_CORE = core;
+  const { compile } = await import(`../runtime/openclaw/compile.ts?t=${Date.now()}`);
+  const out = join(company, "generated");
+  compile(company, { outDir: out });
+  const raw = readFileSync(join(out, "channels.json5"), "utf8");
+  const ch = JSON.parse(raw.slice(raw.indexOf("{")));
+  rmSync(root, { recursive: true, force: true });
+  assert.deepEqual(Object.keys(ch.slack.accounts), ["agent-a"]);
+  assert.equal(ch.slack.accounts["agent-a"].botToken.id, "SLACK_BOT_TOKEN_AGENT_A");
 });
