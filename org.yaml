@@ -1,0 +1,74 @@
+# tepui — org chart archetypes (company-agnostic)
+#
+# This file declares ROLES, not people. The private overlay (org.overlay.yaml)
+# supplies names, model choices, channels, and credentials.
+#
+# `reports_to` is not decoration: it compiles into subagents.allowAgents and
+# tools.agentToAgent allowlists. It is literally who may delegate to whom.
+version: 1
+
+# Model tiers are indirection on purpose — swapping a tier here re-routes every
+# agent that uses it, and keeps provider names out of the org chart.
+tiers:
+  tier1: { role: deep reasoning — architecture, ambiguous judgment }
+  tier2: { role: the real work — drafting, analysis, synthesis }
+  tier3: { role: triage, extraction, classification, routing }
+
+defaults:
+  model: tier2
+  utility_model: tier3
+  # No default sandbox. The compiler REFUSES an agent without an explicit
+  # sandbox block, because OpenClaw's docs contradict each other on the default.
+  subagents: { max_concurrent: 4, max_children_per_agent: 3, max_spawn_depth: 1 }
+  budget: { per_run_usd: 0.50, per_day_usd: 5.00 }
+
+archetypes:
+  ops:
+    title: Chief of Staff
+    system_agent: true          # owns the heartbeat and the daily digest
+    sandbox: { mode: non-main, workspace_access: rw }
+    sandbox_justification: >
+      Runs reconcile and digest, which need host exec against the repos.
+      Holds no third-party credentials.
+    tools: { profile: ops, deny: [image_generate, browser] }
+    credentials: []
+    budget: { per_run_usd: 0.75, per_day_usd: 6.00 }
+
+  analyst:
+    title: Analyst
+    reports_to: ops
+    sandbox: { mode: all, workspace_access: ro }
+    tools: { profile: readonly, deny: [write, edit, apply_patch, exec] }
+    budget: { per_run_usd: 0.25, per_day_usd: 3.00 }
+
+  marketing:
+    title: Marketing
+    reports_to: ops
+    sandbox: { mode: all, workspace_access: rw }
+    tools: { profile: authoring, deny: [exec, browser] }
+    # Deliberately holds no publishing credential. Publishing is a separate,
+    # human-invoked script. Capability absence cannot be prompt-injected past.
+    budget: { per_run_usd: 1.50, per_day_usd: 8.00 }
+
+  engineer:
+    title: Engineer
+    reports_to: ops
+    sandbox: { mode: non-main, workspace_access: rw }
+    sandbox_justification: Needs repo write and test execution.
+    tools: { profile: coding }
+    budget: { per_run_usd: 2.00, per_day_usd: 10.00 }
+
+  # The quarantine role. Anything reading attacker-influenceable text runs here.
+  # Zero skills means zero injected credentials — an injection that lands here
+  # controls an agent that holds nothing and can do nothing.
+  intake:
+    title: Intake
+    reports_to: ops
+    model: tier3
+    sandbox: { mode: all, workspace_access: none }
+    reads_untrusted_input: true    # compiler enforces the invariants below
+    tools:
+      profile: quarantine
+      deny: [exec, write, edit, apply_patch, message, browser, web_fetch, image_generate]
+    credentials: []
+    budget: { per_run_usd: 0.05, per_day_usd: 1.00 }

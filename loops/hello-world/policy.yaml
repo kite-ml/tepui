@@ -1,0 +1,14 @@
+# Layer 2 — policy, declared as capabilities rather than prose.
+loop: hello-world
+owner: ops                  # which agent runs this loop
+description: Smoke-test loop. Proves a git-defined sensor fires and the budget gate bites.
+
+capabilities:
+  credentials: []           # holds nothing
+  writes: [loops/hello-world/memory/]
+
+approvals: []               # nothing here needs a signature
+
+budget:
+  per_run_usd: 0.02         # deliberately tiny — this is also the gate's test fixture
+  per_day_usd: 0.20

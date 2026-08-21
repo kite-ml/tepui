@@ -1,0 +1,14 @@
+{
+  "name": "tepui-core",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22.6" },
+  "scripts": {
+    "compile": "node runtime/openclaw/compile.ts",
+    "lint:compile": "node runtime/openclaw/compile.ts --check",
+    "test": "node --test test/*.test.ts"
+  },
+  "dependencies": { "yaml": "^2.6.1" }
+}

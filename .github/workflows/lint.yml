@@ -1,0 +1,44 @@
+name: lint
+on: [push, pull_request]
+
+jobs:
+  compile-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - run: pnpm install --frozen-lockfile
+
+      - name: Invariant tests
+        run: pnpm test
+
+      # The compiler must be idempotent: running it twice produces no diff.
+      # Without this, generated/ silently drifts from its sources and the
+      # "permission changes are a reviewable diff" property quietly dies.
+      - name: Compiler is idempotent
+        run: |
+          pnpm compile
+          git diff --exit-code -- ../tepui-company/generated || {
+            echo "::error::compile is not idempotent — generated/ changed on a clean run"
+            exit 1
+          }
+
+  no-company-facts-in-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Secondary hygiene check. core.lock is the primary mechanism; this
+      # catches the careless case where a company fact lands in the public repo.
+      - name: Core must stay company-agnostic
+        run: |
+          set -e
+          PATTERNS='kiteml|kite-ml|luis\.dintrono|@gmail\.com|POSTHOG_[A-Z_]*=|sk-ant-|ghp_'
+          if grep -rInE "$PATTERNS" --include='*.md' --include='*.yaml' --include='*.yml' \
+               --include='*.ts' --include='*.json' . | grep -v '^./docs/' ; then
+            echo "::error::company-specific facts or credentials found in the public core"
+            exit 1
+          fi
+          echo "core is clean"

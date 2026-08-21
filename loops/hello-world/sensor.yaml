@@ -1,0 +1,23 @@
+# Layer 1 — sensors are DECLARED here and reconciled into the runtime.
+# Git is the author; the runtime's job store is a cache.
+loop: hello-world
+sensors:
+  - name: hello-world-heartbeat
+    kind: schedule
+    cron: "*/15 * * * *"
+    tz: Europe/London
+    payload:
+      kind: agentTurn
+      message: Run the hello-world loop and report one line to the digest.
+    delivery: none
+
+  - name: hello-world-condition
+    kind: schedule
+    every: 60s
+    # A condition trigger costs ZERO model calls when it returns fire:false.
+    # This is the cheap-sensor proof.
+    condition: scripts/should-run.mjs
+    payload:
+      kind: agentTurn
+      message: The hello-world condition fired. Report what changed.
+    delivery: none

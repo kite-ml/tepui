@@ -1,0 +1,31 @@
+# Local OpenClaw for Phase 0 validation.
+#
+# Runs both kill-tests on a laptop before any VPS is paid for. If either test
+# fails, the architecture changes and we have spent nothing.
+#
+# The image is pinned BY DIGEST, not by :latest — upstream moves fast enough
+# that a floating tag would make these results irreproducible.
+services:
+  gateway:
+    image: ghcr.io/openclaw/openclaw@sha256:2f5ce8848a1a69b3c460622e566cb9395da9fd18d7ef7b038cd8e2c4f195decf
+    container_name: tepui-gateway
+    restart: unless-stopped
+    # Loopback ONLY. Never expose the gateway on 0.0.0.0 — with no valid auth
+    # path configured it refuses connections, but do not rely on that.
+    ports:
+      - "127.0.0.1:18789:18789"
+    volumes:
+      - ./state:/home/node/.openclaw
+      - ../../..:/home/node/.openclaw/repos:ro     # both repos, read-only
+    environment:
+      - OPENCLAW_CONFIG_PATH=/home/node/.openclaw/openclaw.json
+      # No credentials here. Real secrets come from .env, which is gitignored.
+    env_file:
+      - path: ./.env
+        required: false
+    # 2 GB minimum — the build OOMs at 1 GB (exit 137).
+    deploy:
+      resources:
+        limits: { memory: 3G }
+    security_opt:
+      - no-new-privileges:true
