@@ -49,6 +49,20 @@ class CompileError extends Error {
 
 const readYaml = <T,>(p: string): T => parseYaml(readFileSync(p, "utf8")) as T;
 
+/**
+ * tepui uses SEMANTIC profile names in org.yaml (portable, self-describing).
+ * The runtime accepts only four: minimal | coding | messaging | full. Mapping
+ * them here is exactly what the adapter layer is for — org.yaml never learns
+ * a runtime's vocabulary.
+ */
+const PROFILE_MAP: Record<string, { profile: string; deny: string[] }> = {
+  ops:        { profile: "full",    deny: [] },
+  readonly:   { profile: "minimal", deny: ["write", "edit", "apply_patch", "exec"] },
+  authoring:  { profile: "coding",  deny: ["exec", "browser"] },
+  quarantine: { profile: "minimal", deny: ["exec", "write", "edit", "apply_patch", "message", "browser", "web_fetch"] },
+  coding:     { profile: "coding",  deny: [] },
+};
+
 /** JSON5-ish emitter: plain JSON is valid JSON5, plus a provenance banner. */
 function emit(path: string, value: unknown, source: string) {
   const banner =
@@ -135,9 +149,10 @@ export function compile(companyDir: string) {
       if (merged.sandbox?.mode !== "all" || merged.sandbox?.workspace_access !== "none") {
         fail(`agent '${id}' reads untrusted input and must run sandbox.mode=all with workspace_access=none`);
       }
-      const denied = new Set(merged.tools?.deny ?? []);
+      const semantic = merged.tools?.profile ?? "minimal";
+      const effective = new Set([...(PROFILE_MAP[semantic]?.deny ?? []), ...(merged.tools?.deny ?? [])]);
       for (const t of ["exec", "write", "edit", "message", "web_fetch", "browser"]) {
-        if (!denied.has(t)) fail(`agent '${id}' reads untrusted input and must deny '${t}'`);
+        if (!effective.has(t)) fail(`agent '${id}' reads untrusted input and must deny '${t}' (effective denies: ${[...effective].join(", ") || "none"})`);
       }
     }
 
@@ -159,6 +174,7 @@ export function compile(companyDir: string) {
       .map(([subId]) => subId);
 
     agents[id] = {
+      id,
       name: emp.name,
       identity: { name: emp.name },
       workspace: `./tepui/agents/${id}`,
@@ -169,14 +185,18 @@ export function compile(companyDir: string) {
       // An explicit list REPLACES the runtime defaults entirely, which is why
       // every agent gets an exhaustive one and inherits nothing.
       skills: Object.entries(loops).filter(([, p]) => p.owner === id).map(([n]) => n),
-      tools: { profile: merged.tools?.profile, deny: merged.tools?.deny ?? [], ...(merged.tools?.allow ? { allow: merged.tools.allow } : {}) },
-      subagents: {
-        allowAgents: reports,
-        maxConcurrent: merged.subagents?.max_concurrent,
-        maxChildrenPerAgent: merged.subagents?.max_children_per_agent,
-        maxSpawnDepth: merged.subagents?.max_spawn_depth,
-      },
-      ...(merged.system_agent ? { systemAgent: true } : {}),
+      tools: (() => {
+        const semantic = merged.tools?.profile ?? "minimal";
+        const mapped = PROFILE_MAP[semantic];
+        if (!mapped) { fail(`agent '${id}' uses unknown tool profile '${semantic}' (known: ${Object.keys(PROFILE_MAP).join(", ")})`); return {}; }
+        // Union of the profile's baseline denies and the agent's own — deny wins.
+        const deny = [...new Set([...mapped.deny, ...(merged.tools?.deny ?? [])])];
+        return { profile: mapped.profile, deny, ...(merged.tools?.allow ? { allow: merged.tools.allow } : {}) };
+      })(),
+      // Per-agent subagents only carries the allowlist; the numeric caps live in
+      // agents.defaults per the shipped schema.
+      subagents: { allowAgents: reports, requireAgentId: true },
+      ...(merged.system_agent ? { default: true } : {}),
     };
 
     budgets[id] = { ...(core.defaults.budget as Budget), ...(arch.budget ?? {}) };
@@ -195,10 +215,23 @@ export function compile(companyDir: string) {
   const outDir = join(companyDir, "generated");
   mkdirSync(outDir, { recursive: true });
   const src = "org.yaml + org.overlay.yaml + loops/*/policy.yaml";
-  emit(join(outDir, "agents.json5"), { entries: agents, ownership: "explicit" }, src);
+
+  // NOTE: `agents.list` is an ARRAY and `id` is required. The published docs
+  // still show an `agents.entries` map — the shipped JSON schema is the
+  // authority, and it disagrees. Re-check on every image bump; this is exactly
+  // the fast-upstream tax PLAN.md budgets for.
+  const sub = core.defaults.subagents as any ?? {};
+  emit(join(outDir, "agents.json5"), {
+    defaults: {
+      subagents: {
+        maxConcurrent: sub.max_concurrent,
+        maxChildrenPerAgent: sub.max_children_per_agent,
+        maxSpawnDepth: sub.max_spawn_depth,
+      },
+    },
+    list: Object.values(agents),
+  }, src);
   emit(join(outDir, "skills.json5"), { entries: skills }, src);
-  emit(join(outDir, "hooks.json5"), { entries: {} }, src);
-  emit(join(outDir, "plugins.json5"), { entries: { tepui: { path: "./tepui-core/runtime/openclaw/plugin" } } }, src);
   emit(join(outDir, "budgets.json"), { perLoop: Object.fromEntries(Object.entries<any>(loops).map(([n, p]) => [n, p.budget])), perAgent: budgets }, src);
 
   return { agents: Object.keys(agents).length, loops: Object.keys(loops).length };

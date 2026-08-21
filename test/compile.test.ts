@@ -99,17 +99,41 @@ test("refuses an untrusted-input agent that is not fully sandboxed", async () =>
   assert.ok(failures?.some((f) => f.includes("workspace_access=none")), failures?.join("\n"));
 });
 
-test("refuses an untrusted-input agent that can still exec", async () => {
+test("refuses an untrusted-input agent whose EFFECTIVE denies still allow exec", async () => {
+  // Uses the permissive 'ops' profile, whose baseline denies nothing, so the
+  // invariant is genuinely exercised. (Under 'quarantine' the profile itself
+  // already denies exec, which is why that fixture proved nothing.)
   const failures = await compileWith(
     {
       intake: {
         title: "Intake", reads_untrusted_input: true, sandbox: { mode: "all", workspace_access: "none" },
-        tools: { profile: "quarantine", deny: ["write", "edit", "message", "web_fetch", "browser"] }, // exec missing
+        tools: { profile: "ops", deny: ["write", "edit", "message", "web_fetch", "browser"] }, // exec missing
       },
     },
     { intake: { archetype: "intake", name: "Intake" } },
   );
   assert.ok(failures?.some((f) => f.includes("must deny 'exec'")), failures?.join("\n"));
+});
+
+test("the quarantine profile denies exec on its own, without the agent asking", async () => {
+  const failures = await compileWith(
+    {
+      intake: {
+        title: "Intake", reads_untrusted_input: true, sandbox: { mode: "all", workspace_access: "none" },
+        tools: { profile: "quarantine" },   // no explicit denies at all
+      },
+    },
+    { intake: { archetype: "intake", name: "Intake" } },
+  );
+  assert.equal(failures, null, failures?.join("\n"));
+});
+
+test("refuses an unknown tool profile", async () => {
+  const failures = await compileWith(
+    { odd: { title: "Odd", sandbox: OK_SANDBOX, tools: { profile: "made-up" } } },
+    { odd: { archetype: "odd", name: "Odd" } },
+  );
+  assert.ok(failures?.some((f) => f.includes("unknown tool profile")), failures?.join("\n"));
 });
 
 // --- least privilege on credentials ---

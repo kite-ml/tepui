@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "generatedAt": "2026-08-21T12:41:11.655Z",
+  "reason": "gateway.startup_failed",
+  "process": {
+    "pid": 7,
+    "platform": "linux",
+    "arch": "arm64",
+    "node": "24.16.0",
+    "uptimeMs": 2238
+  },
+  "host": {
+    "hostname": "<redacted-hostname>"
+  },
+  "error": {
+    "name": "InvalidConfigError",
+    "code": "INVALID_CONFIG",
+    "message": "Invalid config at /home/node/.openclaw/openclaw.json: agents: Invalid input hooks: Invalid input Run \"openclaw doctor --fix\" to repair, then retry. If startup is still blocked, inspect the adjacent .bak backup before restoring it manually."
+  },
+  "snapshot": {
+    "generatedAt": "2026-08-21T12:41:11.655Z",
+    "capacity": 1000,
+    "count": 0,
+    "dropped": 0,
+    "events": [],
+    "summary": {
+      "byType": {}
+    }
+  }
+}

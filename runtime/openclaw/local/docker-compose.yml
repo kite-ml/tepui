@@ -16,7 +16,22 @@ services:
       - "127.0.0.1:18789:18789"
     volumes:
       - ./state:/home/node/.openclaw
-      - ../../..:/home/node/.openclaw/repos:ro     # both repos, read-only
+      # SPLIT MOUNT — this is the enforcement mechanism, and it is load-bearing.
+      #
+      # Phase 0 finding (2026-08-21): OpenClaw's "$include fails closed for its
+      # own writes" does NOT hold for `config set`. With a writable mount the
+      # runtime rewrote generated/agents.json5, flipping intake.sandbox.mode
+      # from "all" to "off" — disabling the sandbox on the quarantine agent —
+      # and applied it live without a restart.
+      #
+      # So git-as-truth is enforced by FILESYSTEM PERMISSIONS, not by the app's
+      # good behaviour. Config the runtime must never mutate is mounted :ro;
+      # only the agent workspaces and loop memory are writable.
+      - ../../../../tepui-company/generated:/home/node/.openclaw/repos/tepui-company/generated:ro
+      - ../../../../tepui-core:/home/node/.openclaw/repos/tepui-core:ro
+      - ../../../../tepui-company/agents:/home/node/.openclaw/repos/tepui-company/agents
+      - ../../../../tepui-company/loops:/home/node/.openclaw/repos/tepui-company/loops
+      - ../../../../tepui-company/decisions:/home/node/.openclaw/repos/tepui-company/decisions
     environment:
       - OPENCLAW_CONFIG_PATH=/home/node/.openclaw/openclaw.json
       # No credentials here. Real secrets come from .env, which is gitignored.

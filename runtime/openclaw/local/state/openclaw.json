@@ -1,0 +1,22 @@
+{
+  "$schema": "https://docs.openclaw.ai/schema/openclaw.json",
+
+  // ── machine-local only: credentials and bind config. NOT in git. ──
+  "gateway": {
+    "mode": "local",
+    "bind": "loopback"
+  },
+
+  // ── everything below is GIT-OWNED ──
+  // OpenClaw's includes fail closed for its own writes, so nothing here can be
+  // rewritten by the CLI, the wizard, or an agent. Changing an agent's
+  // permissions requires a commit. That is what makes git the source of truth
+  // structurally rather than by convention.
+  "agents":  { "$include": "./repos/tepui-company/generated/agents.json5" },
+  "skills":  { "$include": "./repos/tepui-company/generated/skills.json5" },
+
+  "cron": {
+    "enabled": true,
+    "triggers": { "enabled": true }
+  }
+}
