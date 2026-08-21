@@ -91,7 +91,7 @@ function emit(path: string, value: unknown, source: string) {
   writeFileSync(path, banner + JSON.stringify(value, null, 2) + "\n");
 }
 
-export function compile(companyDir: string) {
+export function compile(companyDir: string, opts: { workspaceRoot?: string; outDir?: string } = {}) {
   const failures: string[] = [];
   const fail = (msg: string) => failures.push(msg);
 
@@ -137,7 +137,9 @@ export function compile(companyDir: string) {
     credentialsNeededBy.set(owner, set);
   }
 
-  const wsRoot = overlay.paths?.workspace_root;
+  // A deployment may override where workspaces live (container vs bare metal)
+  // without changing the committed overlay. Same behaviour, different host.
+  const wsRoot = opts.workspaceRoot ?? overlay.paths?.workspace_root;
   if (!wsRoot) fail("org.overlay.yaml must declare paths.workspace_root — the compiler will not guess where agent workspaces live");
 
   // ---- agents ------------------------------------------------------------
@@ -271,7 +273,7 @@ export function compile(companyDir: string) {
 
   if (failures.length) throw new CompileError(failures);
 
-  const outDir = join(companyDir, "generated");
+  const outDir = opts.outDir ?? join(companyDir, "generated");
   mkdirSync(outDir, { recursive: true });
   const src = "org.yaml + org.overlay.yaml + loops/*/policy.yaml";
 
@@ -327,8 +329,9 @@ const invokedDirectly =
 if (invokedDirectly) {
 const args = process.argv.slice(2);
 const companyDir = resolve(args.find((a) => !a.startsWith("--")) ?? "../tepui-company");
+const flag = (n: string) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : undefined; };
 try {
-  const r = compile(companyDir);
+  const r = compile(companyDir, { workspaceRoot: flag("workspace-root"), outDir: flag("out") });
   console.log(`compiled ${r.agents} agents, ${r.loops} loops -> ${companyDir}/generated/`);
 } catch (e) {
   if (e instanceof CompileError) {
