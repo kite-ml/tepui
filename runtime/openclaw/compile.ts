@@ -100,7 +100,7 @@ export function compile(companyDir: string) {
   );
   const overlay = readYaml<{
     paths?: { workspace_root: string };
-    provider?: { id: string; api: string; base_url: string; api_key_env: string };
+    provider?: { id: string; api: string; base_url: string; api_key_env: string; tier?: string };
     tiers: Record<string, string>;
     employees: Record<string, { archetype: string; name: string; model?: string; slack_channels?: string[]; credentials?: string[] }>;
     loops: Record<string, { enabled: boolean }>;
@@ -230,6 +230,24 @@ export function compile(companyDir: string) {
         skills[loopName] = skills[loopName] ?? { env: {} };
         skills[loopName].env[c] = `\${${c}}`;   // resolved from the gitignored .env
       }
+    }
+  }
+
+  // INVARIANT: an evaluation-tier provider may never serve a loop that handles
+  // real company data. NVIDIA's trial ToS makes prompts and outputs training
+  // data and prohibits personal/financial information — a company OS is made
+  // of exactly that. This turns "switch before it matters" into a build error.
+  if (overlay.provider?.tier === "evaluation") {
+    for (const [loopName, policy] of Object.entries<any>(loops)) {
+      if (policy.handles_company_data) {
+        fail(`loop '${loopName}' is marked handles_company_data but provider '${overlay.provider.id}' is tier=evaluation. ` +
+             `Its ToS permits internal testing only, collects prompts and outputs as training data, and prohibits ` +
+             `personal/financial information. Switch to a commercial endpoint before enabling this loop.`);
+      }
+    }
+    if ((overlay.employees && Object.values(overlay.employees).some((e: any) => (e.credentials ?? []).length > 0))) {
+      fail(`provider '${overlay.provider.id}' is tier=evaluation but agents hold credentials. ` +
+           `Real credentials imply real data. Switch to a commercial endpoint first.`);
     }
   }
 

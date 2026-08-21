@@ -191,3 +191,23 @@ test("refuses a loop with no owner", async () => {
   );
   assert.ok(failures?.some((f) => f.includes("no owner")), failures?.join("\n"));
 });
+
+test("refuses an evaluation-tier provider serving a loop that handles company data", async () => {
+  const root = mkdtempSync(join(tmpdir(), "tepui-"));
+  const core = join(root, "core"), company = join(root, "company");
+  mkdirSync(join(core, "loops", "crm"), { recursive: true });
+  mkdirSync(company, { recursive: true });
+  writeFileSync(join(core, "org.yaml"), JSON.stringify({ ...BASE_ORG,
+    archetypes: { ops: { title: "Ops", sandbox: OK_SANDBOX, tools: { profile: "ops" } } } }));
+  writeFileSync(join(core, "loops", "crm", "policy.yaml"),
+    JSON.stringify({ owner: "ops", handles_company_data: true, capabilities: { credentials: [] } }));
+  writeFileSync(join(company, "org.overlay.yaml"), JSON.stringify({ ...BASE_OVERLAY,
+    provider: { id: "nvidia", api: "openai-completions", base_url: "https://x/v1", api_key_env: "K", tier: "evaluation" },
+    employees: { ops: { archetype: "ops", name: "Ops" } } }));
+  process.env.TEPUI_CORE = core;
+  const { compile } = await import(`../runtime/openclaw/compile.ts?t=${Date.now()}`);
+  let failures: string[] | null = null;
+  try { compile(company); } catch (e: any) { failures = e.failures ?? null; }
+  rmSync(root, { recursive: true, force: true });
+  assert.ok(failures?.some((f) => f.includes("tier=evaluation")), failures?.join("\n"));
+});
