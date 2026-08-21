@@ -102,7 +102,7 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
     paths?: { workspace_root: string };
     provider?: { id: string; api: string; base_url: string; api_key_env: string; tier?: string };
     tiers: Record<string, string>;
-    employees: Record<string, { archetype: string; name: string; model?: string; slack_account?: string; slack_channels?: string[]; credentials?: string[] }>;
+    employees: Record<string, { archetype: string; name: string; model?: string; slack_account?: string; slack_channels?: string[]; slack_default?: boolean; credentials?: string[] }>;
     loops: Record<string, { enabled: boolean }>;
   }>(join(companyDir, "org.overlay.yaml"));
 
@@ -279,7 +279,8 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
   // "default" app: one integration for the whole company, and the CHANNEL
   // decides which agent answers. Cheapest to set up (1 app, 2 tokens); you
   // address the app rather than the agent.
-  const usesShared = Object.values(overlay.employees).some((e) => !e.slack_account && (e.slack_channels ?? []).length);
+  const usesShared = Object.values(overlay.employees).some(
+    (e) => !e.slack_account && ((e.slack_channels ?? []).length || e.slack_default));
   if (usesShared) {
     slackAccounts["default"] = {
       botToken: { source: "env", provider: "default", id: "SLACK_BOT_TOKEN" },
@@ -323,10 +324,31 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
     }
   }
 
-  // An agent with neither is unreachable from Slack — usually a mistake worth
-  // surfacing, but never fatal (intake is reached by delegation, not directly).
-  const reachable = new Set(bindings.map((b) => b.agentId));
-  const unreachable = Object.keys(overlay.employees).filter((id) => !reachable.has(id));
+  // Exactly one agent may be the shared app's catch-all: it answers wherever
+  // the app is invited unless a narrower channel rule claims that channel.
+  // Emitted LAST so every specific rule is evaluated first.
+  const defaults = Object.entries(overlay.employees).filter(([, e]) => e.slack_default && !e.slack_account);
+  if (defaults.length > 1) {
+    fail(`more than one agent claims slack_default: ${defaults.map(([id]) => id).join(", ")} — routing must be unambiguous`);
+  }
+  for (const [id] of defaults) {
+    bindings.push({ agentId: id, comment: `catch-all -> ${id}`, match: { channel: "slack", accountId: "default" } });
+  }
+
+  // Distinguish "no direct Slack route" from "unreachable". With a catch-all
+  // present, every agent it can delegate to is still reachable — just not
+  // addressable. Conflating the two produces a scary warning about a healthy
+  // config, which trains people to ignore warnings.
+  const routed = new Set(bindings.map((b) => b.agentId));
+  const catchAll = defaults[0]?.[0];
+  const delegable = new Set<string>();
+  if (catchAll) {
+    for (const [id, emp] of Object.entries(overlay.employees)) {
+      if (core.archetypes[emp.archetype]?.reports_to === catchAll) delegable.add(id);
+    }
+  }
+  const unaddressable = Object.keys(overlay.employees).filter((id) => !routed.has(id) && delegable.has(id));
+  const unreachable = Object.keys(overlay.employees).filter((id) => !routed.has(id) && !delegable.has(id));
 
   if (failures.length) throw new CompileError(failures);
 
@@ -389,7 +411,7 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
   }
   emit(join(outDir, "budgets.json"), { perLoop: Object.fromEntries(Object.entries<any>(loops).map(([n, p]) => [n, p.budget])), perAgent: budgets }, src);
 
-  return { agents: Object.keys(agents).length, loops: Object.keys(loops).length, slackAccounts: Object.keys(slackAccounts).length, unreachable };
+  return { agents: Object.keys(agents).length, loops: Object.keys(loops).length, slackAccounts: Object.keys(slackAccounts).length, unaddressable, unreachable };
 }
 
 export { CompileError };
@@ -405,7 +427,8 @@ const flag = (n: string) => { const i = args.indexOf(`--${n}`); return i >= 0 ? 
 try {
   const r = compile(companyDir, { workspaceRoot: flag("workspace-root"), outDir: flag("out") });
   console.log(`compiled ${r.agents} agents, ${r.loops} loops` + (r.slackAccounts ? `, ${r.slackAccounts} slack app(s)` : "") + ` -> ${companyDir}/generated/`);
-  if (r.unreachable.length) console.log(`  note: not reachable from Slack (delegation only): ${r.unreachable.join(", ")}`);
+  if (r.unaddressable.length) console.log(`  via delegation from the catch-all: ${r.unaddressable.join(", ")}`);
+  if (r.unreachable.length) console.log(`  NOT reachable from Slack at all: ${r.unreachable.join(", ")}`);
 } catch (e) {
   if (e instanceof CompileError) {
     console.error(`\ncompile FAILED — refusing to emit:\n`);

@@ -255,3 +255,45 @@ test("per-agent Slack apps: one account each, addressable anywhere", async () =>
   assert.deepEqual(Object.keys(ch.slack.accounts), ["agent-a"]);
   assert.equal(ch.slack.accounts["agent-a"].botToken.id, "SLACK_BOT_TOKEN_AGENT_A");
 });
+
+test("catch-all binding is emitted last so channel rules win", async () => {
+  const root = mkdtempSync(join(tmpdir(), "tepui-"));
+  const core = join(root, "core"), company = join(root, "company");
+  mkdirSync(join(core, "loops"), { recursive: true }); mkdirSync(company, { recursive: true });
+  writeFileSync(join(core, "org.yaml"), JSON.stringify({ ...BASE_ORG, archetypes: {
+    ops: { title: "Ops", sandbox: OK_SANDBOX, tools: { profile: "ops" } },
+    an:  { title: "An", reports_to: "ops", sandbox: OK_SANDBOX, tools: { profile: "readonly" } } } }));
+  writeFileSync(join(company, "org.overlay.yaml"), JSON.stringify({ ...BASE_OVERLAY, employees: {
+    ops: { archetype: "ops", name: "Ops", slack_default: true },
+    an:  { archetype: "an", name: "An", slack_channels: ["C0AAA"] } } }));
+  process.env.TEPUI_CORE = core;
+  const { compile } = await import(`../runtime/openclaw/compile.ts?t=${Date.now()}`);
+  const out = join(company, "generated");
+  compile(company, { outDir: out });
+  const raw = readFileSync(join(out, "bindings.json5"), "utf8");
+  const bind = JSON.parse(raw.slice(raw.indexOf("[")));
+  rmSync(root, { recursive: true, force: true });
+
+  assert.equal(bind[0].agentId, "an", "the specific channel rule must come first");
+  assert.ok(bind[0].match.peer, "and it must be channel-scoped");
+  assert.equal(bind[bind.length - 1].agentId, "ops", "the catch-all must come last");
+  assert.ok(!bind[bind.length - 1].match.peer, "the catch-all must not be channel-scoped");
+});
+
+test("refuses two agents claiming the catch-all", async () => {
+  const root = mkdtempSync(join(tmpdir(), "tepui-"));
+  const core = join(root, "core"), company = join(root, "company");
+  mkdirSync(join(core, "loops"), { recursive: true }); mkdirSync(company, { recursive: true });
+  writeFileSync(join(core, "org.yaml"), JSON.stringify({ ...BASE_ORG, archetypes: {
+    a: { title: "A", sandbox: OK_SANDBOX, tools: { profile: "ops" } },
+    b: { title: "B", sandbox: OK_SANDBOX, tools: { profile: "ops" } } } }));
+  writeFileSync(join(company, "org.overlay.yaml"), JSON.stringify({ ...BASE_OVERLAY, employees: {
+    a: { archetype: "a", name: "A", slack_default: true },
+    b: { archetype: "b", name: "B", slack_default: true } } }));
+  process.env.TEPUI_CORE = core;
+  const { compile } = await import(`../runtime/openclaw/compile.ts?t=${Date.now()}`);
+  let failures: string[] | null = null;
+  try { compile(company, { outDir: join(company, "generated") }); } catch (e: any) { failures = e.failures ?? null; }
+  rmSync(root, { recursive: true, force: true });
+  assert.ok(failures?.some((f) => f.includes("slack_default")), failures?.join("\n"));
+});

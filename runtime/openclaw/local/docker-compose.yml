@@ -7,7 +7,10 @@
 # that a floating tag would make these results irreproducible.
 services:
   gateway:
-    image: ghcr.io/openclaw/openclaw@sha256:2f5ce8848a1a69b3c460622e566cb9395da9fd18d7ef7b038cd8e2c4f195decf
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tepui/gateway:local
     container_name: tepui-gateway
     restart: unless-stopped
     # Loopback ONLY. Never expose the gateway on 0.0.0.0 — with no valid auth

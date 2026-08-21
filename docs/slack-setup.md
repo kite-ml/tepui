@@ -2,13 +2,15 @@
 
 Slack is the human interface to tepui: you talk to `ops` in a channel, and `ops` delegates. This is the runbook for the parts only a human can do.
 
-## One app per agent
+## One app, routed by channel
 
-You address agents individually — `@tepui-ops`, `@tepui-analyst`, `@tepui-marketing` — and that requires **one Slack app per agent**, because in Slack one app is one bot user is one `@handle`. OpenClaw supports this through `channels.slack.accounts.*`, with each account opening its own Socket Mode connection, and `bindings` routing on `accountId`.
+**One Slack app for the whole company.** You `@agent` and the *channel* decides who answers: `#design` reaches the designer, `#analytics` reaches the analyst. Two tokens total, not two per agent.
 
-This costs more setup (three apps, six tokens) but buys something beyond ergonomics: **Slack channel membership becomes an access-control layer that mirrors the org chart.** Invite `@tepui-marketing` only where marketing should operate, and the capability boundary is visible in the UI rather than buried in `org.yaml`.
+`ops` is the **catch-all** — it answers wherever the app is invited unless a narrower channel rule claims that channel — and it delegates to the others. So everything works from the moment the app is installed, before you have wired up a single channel ID.
 
-`intake` deliberately gets **no** Slack app. It is the quarantine agent, reached by delegation from `ops` — making it directly addressable would hand anyone a channel straight into the agent designed to absorb hostile text.
+Why not a handle per agent? In Slack **one app is one bot user is one `@handle`**, so `@agent-designer` would need its own app and its own token pair. That is supported (`slack_account: <name>` on any employee) and worth doing later for an agent you address constantly, but it is N apps for N handles, and channel routing gets you most of the way for a fifth of the setup.
+
+`intake` gets no Slack route at all. It is the quarantine agent, reached only by delegation — making it addressable would hand anyone a channel straight into the agent designed to absorb hostile text.
 
 **Socket Mode, not Events API.** Socket Mode opens an *outbound* WebSocket to Slack, so the gateway needs **no public URL, no DNS, no TLS, no reverse proxy, and no inbound firewall rule.** That is what lets the same config run on a laptop, a GCP VM with zero ingress, and a Mac mini behind home NAT — which is the whole portability requirement.
 
@@ -52,15 +54,13 @@ In Slack: right-click a channel → **View channel details** → the ID is at th
 
 ## 4. Wire it up
 
-Run the helper once per agent — it prompts hidden, verifies against Slack, and writes to the gitignored `.env`:
+Run the helper once — it prompts hidden, verifies against Slack, and writes to the gitignored `.env`:
 
 ```bash
-./deploy/slack/finish-setup.sh ops
-./deploy/slack/finish-setup.sh analyst
-./deploy/slack/finish-setup.sh marketing
+./deploy/slack/finish-setup.sh
 ```
 
-Each agent's tokens land as `SLACK_BOT_TOKEN_OPS` / `SLACK_APP_TOKEN_OPS` and so on, matching the `slack_account` value in `org.overlay.yaml`. Then `pnpm compile`.
+Tokens land as `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN`. Then `pnpm compile`.
 
 **Optionally pin an agent to specific channels** by adding IDs alongside its account:
 

@@ -8,13 +8,29 @@
   },
 
   // ── everything below is GIT-OWNED ──
-  // OpenClaw's includes fail closed for its own writes, so nothing here can be
-  // rewritten by the CLI, the wizard, or an agent. Changing an agent's
-  // permissions requires a commit. That is what makes git the source of truth
-  // structurally rather than by convention.
+  // Enforced by a READ-ONLY MOUNT, not by include semantics. Tested 2026-08-21:
+  // with a writable mount, `openclaw config set` rewrote an $include'd file in
+  // place and applied it live, disabling the quarantine agent's sandbox. The
+  // documented "includes fail closed for OpenClaw-owned writes" does not cover
+  // that path. Filesystem permissions do.
+  // See decisions/2026-08-21-git-truth-enforced-by-mount.md
   "agents":  { "$include": "./repos/tepui-company/generated/agents.json5" },
   "skills":  { "$include": "./repos/tepui-company/generated/skills.json5" },
   "models":  { "$include": "./repos/tepui-company/generated/models.json5" },
+  // Slack activates only once SLACK_BOT_TOKEN exists. The gateway fails closed
+  // on a missing secret — correct, but it should not take the whole company OS
+  // down while a token is still being minted. deploy/slack/finish-setup.sh
+  // uncomments these two lines after it has verified the token with Slack.
+  // "channels":{ "$include": "./repos/tepui-company/generated/channels.json5" },
+  // "bindings":{ "$include": "./repos/tepui-company/generated/bindings.json5" },
+
+  // The Slack channel is a PLUGIN and is not bundled in core. OpenClaw only
+  // searches its own stock extensions dir, so a global npm install is invisible
+  // to it — the load path has to be explicit.
+  "plugins": {
+    "load": { "paths": ["/usr/local/lib/node_modules/@openclaw/slack"] },
+    "entries": { "slack": { "enabled": true } }
+  },
 
   "cron": {
     "enabled": true,
