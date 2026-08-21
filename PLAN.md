@@ -28,13 +28,19 @@ What we get without building it:
 
 | Capability | Why it matters |
 |---|---|
-| **Tool policy enforced *before* the model call** — a denied tool's schema is never sent | Exactly the "capability absence can't be prompt-injected past" property. Native |
+| **Tool policy enforced *before* the model call** — a denied tool's schema is never sent | Exactly the "capability absence can't be prompt-injected past" property. Native — but see the mount finding: policy is only as good as the file it is read from |
 | **Condition triggers** — a script returns `{fire: boolean}`; on `false` it reschedules with **no model call and no run history** | Poll cheaply, wake the model only when something is true |
 | **Native approval gates** — `approval: required`, `required_approver`, `require_different_approver`, resume tokens | Layer 2 signature, already built |
 | **Per-agent + per-job model routing**, 50+ providers, local-model preflight | Cost architecture and provider-neutrality |
 | Always-on gateway, channels, per-agent credential injection | The "agent employees you can message" shape |
 
-**And the git problem solves itself, structurally.** OpenClaw's config docs note that *includes with sibling overrides fail closed for OpenClaw-owned writes*. Normally that reads as a limitation. Here it is **the enforcement mechanism**: OpenClaw's own CLI and wizard cannot silently rewrite an `$include`d section, so any change to agents, skills, hooks, or plugins **must be a commit**. This is precisely what Paperclip could not offer, where agents mutate structure at runtime and the repo goes stale by design.
+**And git-as-truth is enforced — by the operating system.**
+
+> ⚠️ **Corrected 2026-08-21 by empirical test.** An earlier draft justified this choice on OpenClaw's documented *"includes fail closed for OpenClaw-owned writes."* **That does not hold for `config set`.** Against a live gateway with a writable mount, the runtime rewrote the `$include`d `generated/agents.json5` in place and applied it **live without a restart** — flipping `intake.sandbox.mode` from `all` to `off`, disabling the sandbox on the quarantine agent. See [decisions/2026-08-21-git-truth-enforced-by-mount.md](../tepui-company/decisions/2026-08-21-git-truth-enforced-by-mount.md).
+
+The mechanism is a **split mount** instead. Everything the runtime must never mutate is mounted read-only; only agent workspaces, loop memory, and decisions are writable. The same write then fails with `FsSafeError`.
+
+This is a **better** mechanism than the one it replaces: enforced by the OS rather than by application behaviour, independent of upstream keeping a property they never promised in those words, and it fails loudly rather than as a silent live downgrade of a security boundary.
 
 ---
 
@@ -214,6 +220,7 @@ OpenClaw gives excellent primitives and **no opinion above them**. "Employees" i
 
 In priority order. The first is the cheapest test with the highest stakes.
 
+0. ~~**Does `$include` prevent runtime writes?**~~ **Answered: NO.** Tested and falsified — see above. Fixed with a read-only mount. This is why these tests run *before* anything is built on them.
 1. **Cross-agent credential visibility.** Per-skill env injection goes into `process.env` of the host agent process. With concurrent runs of different agents in one gateway, this is a plausible cross-agent secret leak, and no doc resolves it. **Test:** run an agent with `skills: []` and a read tool concurrently with the marketing loop, ask it to dump its environment. If it sees `IMAGE_API_KEY`, the single-gateway capability model is broken and we adopt **profile separation** (`openclaw --profile`, separate state dir, second container, ~200 MB) immediately.
 2. **Whether any native spend cap exists.** None was found. If one does, §4.3 shrinks a lot.
 3. **The sandbox default.** The threat model and the config examples contradict each other. Emit it explicitly for every agent regardless.

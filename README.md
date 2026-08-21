@@ -63,7 +63,9 @@ Everything is markdown in git. That is not an aesthetic preference — it's what
 
 **Runtime: [OpenClaw](https://github.com/openclaw/openclaw)**, self-hosted on a small VPS (~$5–12/mo). It supplies the always-on gateway, the scheduler, per-agent capability isolation, approval gates, and chat channels. GitHub Actions is the CI plane — it never runs a loop, it proves loops are correct.
 
-Git stays the source of truth **structurally**: agents, skills, hooks, and plugins are `$include`d from the repo, and OpenClaw's includes *fail closed for its own writes* — so nothing can change those sections except a commit.
+Git stays the source of truth, enforced by a **read-only mount**: everything the runtime must never mutate is mounted `:ro`, so a config write from inside fails with `FsSafeError` and the only way to change an agent's permissions is a commit.
+
+> We originally relied on OpenClaw's documented "includes fail closed for its own writes." **Phase 0 testing falsified that** — with a writable mount the runtime disabled the quarantine agent's sandbox live, without a restart. Filesystem permissions are the stronger mechanism. See [the decision record](../tepui-company/decisions/2026-08-21-git-truth-enforced-by-mount.md).
 
 ### Pillar 1 — Context: the company brain
 
