@@ -13,7 +13,7 @@
  *      emitting something permissive. A compiler that warns is a compiler that
  *      gets ignored.
  */
-import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
@@ -100,7 +100,7 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
   );
   const overlay = readYaml<{
     paths?: { workspace_root: string };
-    provider?: { id: string; api: string; base_url: string; api_key_env: string; tier?: string };
+    provider?: { id: string; api: string; base_url: string; api_key_env: string; tier?: string; timeout_seconds?: number };
     tiers: Record<string, string>;
     employees: Record<string, { archetype: string; name: string; model?: string; slack_account?: string; slack_channels?: string[]; slack_default?: boolean; credentials?: string[] }>;
     loops: Record<string, { enabled: boolean }>;
@@ -352,6 +352,78 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
 
   if (failures.length) throw new CompileError(failures);
 
+  // ---- standing orders ----------------------------------------------------
+  // Without these an agent runs OpenClaw's first-run bootstrap and asks who it
+  // is instead of doing the job. We already know who it is — the org chart says
+  // so — so fill IDENTITY.md from it and remove BOOTSTRAP.md.
+  //
+  // IDENTITY.md is only overwritten while it is still the untouched template.
+  // Once a human or the learning loop edits it, it is theirs.
+  const TEMPLATE_MARKER = "_Fill this in during your first conversation";
+  for (const [id, emp] of Object.entries(overlay.employees)) {
+    const arch = core.archetypes[emp.archetype];
+    if (!arch) continue;
+    const dir = join(companyDir, "agents", id);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+
+    const identity = join(dir, "IDENTITY.md");
+    const untouched = !existsSync(identity) || readFileSync(identity, "utf8").includes(TEMPLATE_MARKER);
+    if (untouched) {
+      const owned = Object.entries<any>(loops).filter(([, p2]) => p2.owner === id).map(([n]) => n);
+      const delegatesTo = Object.entries(overlay.employees)
+        .filter(([, e]) => core.archetypes[e.archetype]?.reports_to === id).map(([sid]) => sid);
+      const denies = [...new Set([...(PROFILE_MAP[arch.tools?.profile ?? "minimal"]?.deny ?? []), ...(arch.tools?.deny ?? [])])];
+      const creds = emp.credentials ?? arch.credentials ?? [];
+      const isChief = !arch.reports_to;
+
+      writeFileSync(identity, [
+        `# IDENTITY.md — ${emp.name}`,
+        ``,
+        `> GENERATED from org.yaml. Edit freely — once you change it, the compiler`,
+        `> stops touching it. Do not hand-edit permissions here; they live in org.yaml`,
+        `> and are enforced by the runtime, not by this file.`,
+        ``,
+        `- **Name:** ${emp.name}`,
+        `- **Role:** ${arch.title}`,
+        `- **Reports to:** ${arch.reports_to ?? "the human operator"}`,
+        delegatesTo.length ? `- **Delegates to:** ${delegatesTo.join(", ")}` : `- **Delegates to:** nobody`,
+        ...(owned.length ? [`- **Loops owned:** ${owned.join(", ")}`] : []),
+        ``,
+        `## Your job`,
+        ``,
+        isChief
+          ? `You are the front door. You take a request, decide which agent should do the work, and delegate. You do not do specialist work yourself when a specialist exists.`
+          : `You do ${arch.title.toLowerCase()} work and nothing else. If a request belongs to another agent, say so and hand it back rather than attempting it.`,
+        ``,
+        `## What you cannot do`,
+        ``,
+        denies.length
+          ? `You do not have these tools: ${denies.join(", ")}. That is deliberate.`
+          : `You have the standard tool set.`,
+        creds.length
+          ? `You hold: ${creds.join(", ")}. Use them only for your own job.`
+          : `**You hold no credentials.** If a task needs one, hand it back rather than improvising.`,
+        ``,
+        `Do not ask for a restriction to be lifted and do not work around one. A`,
+        `missing tool is a decision recorded in \`org.yaml\`, not an accident.`,
+        ``,
+        `## How to behave`,
+        ``,
+        `- Be brief. You are talking to two busy people, usually in Slack.`,
+        `- Never invent a fact, a number, or a policy. If you do not know, say so.`,
+        `- Never claim you did something you did not do.`,
+        `- Drafts go to \`_drafts/\`. Publishing is a human action, always.`,
+        ``,
+      ].join("\n") + "\n");
+    }
+
+    // Remove the first-run trigger. We supplied the identity, so there is
+    // nothing to discover — and BOOTSTRAP.md's own instructions say to delete
+    // it once that is done.
+    const boot = join(dir, "BOOTSTRAP.md");
+    if (existsSync(boot)) rmSync(boot);
+  }
+
   const outDir = opts.outDir ?? join(companyDir, "generated");
   mkdirSync(outDir, { recursive: true });
   const src = "org.yaml + org.overlay.yaml + loops/*/policy.yaml";
@@ -401,6 +473,11 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
           api: p.api,
           baseUrl: p.base_url,
           apiKey: `\${${p.api_key_env}}`,
+          // Reasoning models stream for a long time before their first token
+          // and blow through the ~120s default idle watchdog, which shows up
+          // as "produced no reply before the idle watchdog; retrying" and
+          // silently doubles your spend. Observed on nemotron-3-super.
+          timeoutSeconds: p.timeout_seconds ?? 600,
           models: modelIds.map((full) => {
             const id = full.startsWith(`${p.id}/`) ? full.slice(p.id.length + 1) : full;
             return { id, name: id, contextTokens: MODEL_CONTEXT[full] ?? 128_000, cost: MODEL_COST[full] ?? UNPRICED };
