@@ -98,5 +98,3 @@ You rewrite `runtime/openclaw/` — 729 lines, and 531 of that is the emit half 
 You keep: every `SKILL.md`, every script, the org chart, the budget gate, all 33 tests, the loop contracts, the decision records, and the docs.
 
 That ratio is the whole argument for the structure. `runtime/` is the part designed to be thrown away.
-
-<!-- upstream sync check -->
