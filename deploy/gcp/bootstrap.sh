@@ -16,8 +16,9 @@ export PATH=/usr/local/node24/bin:$PATH
 node --version
 
 echo "==> openclaw (pinned) + slack plugin into node24's global"
-npm ls -g openclaw --prefix /usr/local/node24 2>/dev/null | grep -q 2026.7.1 \
-  || sudo /usr/local/node24/bin/npm install -g openclaw@2026.7.1 @openclaw/slack@2026.7.1
+# sudo strips PATH, and npm's shebang needs `node` on it — hence env PATH.
+/usr/local/node24/bin/npm ls -g openclaw 2>/dev/null | grep -q 2026.7.1 \
+  || sudo env "PATH=/usr/local/node24/bin:$PATH" /usr/local/node24/bin/npm install -g openclaw@2026.7.1 @openclaw/slack@2026.7.1
 echo "==> service user + dirs on the state disk"
 id tepui >/dev/null 2>&1 || sudo useradd -r -m -d /srv/tepui -s /usr/sbin/nologin tepui
 sudo usermod -aG docker tepui
