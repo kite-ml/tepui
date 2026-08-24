@@ -297,3 +297,38 @@ test("refuses two agents claiming the catch-all", async () => {
   rmSync(root, { recursive: true, force: true });
   assert.ok(failures?.some((f) => f.includes("slack_default")), failures?.join("\n"));
 });
+
+test("agents get a tier-descent fallback chain", async () => {
+  const root = mkdtempSync(join(tmpdir(), "tepui-"));
+  const core = join(root, "core"), company = join(root, "company");
+  mkdirSync(join(core, "loops"), { recursive: true }); mkdirSync(company, { recursive: true });
+  writeFileSync(join(core, "org.yaml"), JSON.stringify({
+    ...BASE_ORG,
+    defaults: { ...BASE_ORG.defaults, model: "tier1", utility_model: "tier3" },
+    archetypes: {
+      big:   { title: "Big",   sandbox: OK_SANDBOX, tools: { profile: "readonly" } },
+      small: { title: "Small", model: "tier3", sandbox: OK_SANDBOX, tools: { profile: "readonly" } },
+    },
+  }));
+  writeFileSync(join(company, "org.overlay.yaml"), JSON.stringify({
+    ...BASE_OVERLAY,
+    tiers: { tier1: "p/big", tier2: "p/mid", tier3: "p/small" },
+    employees: { big: { archetype: "big", name: "Big" }, small: { archetype: "small", name: "Small" } },
+  }));
+  process.env.TEPUI_CORE = core;
+  const { compile } = await import(`../runtime/openclaw/compile.ts?t=${Date.now()}`);
+  const out = join(company, "generated");
+  compile(company, { outDir: out });
+  const raw = readFileSync(join(out, "agents.json5"), "utf8");
+  const list = JSON.parse(raw.slice(raw.indexOf("{"))).list;
+  rmSync(root, { recursive: true, force: true });
+
+  const big = list.find((a: any) => a.id === "big");
+  assert.equal(big.model.primary, "p/big");
+  assert.deepEqual(big.model.fallbacks, ["p/mid", "p/small"], "tier1 must descend through every lower tier");
+
+  // The cheapest tier has nothing below it — a chain back up would re-enter the
+  // contended pool that failed, which is worse than surfacing the error.
+  const small = list.find((a: any) => a.id === "small");
+  assert.equal(typeof small.model, "string", "tier3 gets no fallback chain");
+});

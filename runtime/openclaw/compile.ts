@@ -189,8 +189,21 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
       }
     }
 
+    // Tier descent as a fallback chain. A single "service overloaded" should
+    // degrade to a smaller model, not kill the turn — the runtime reported
+    // `next=none` and surfaced the error because no chain was configured.
+    //
+    // Falling to a DIFFERENT model matters more than retrying the same one:
+    // providers meter concurrency per model, so the smaller tier is a separate
+    // pool rather than the same queue.
+    const TIER_ORDER = ["tier1", "tier2", "tier3"];
     const modelTier = emp.model ?? merged.model!;
-    const model = overlay.tiers[modelTier] ?? modelTier;
+    const primary = overlay.tiers[modelTier] ?? modelTier;
+    const startIdx = TIER_ORDER.indexOf(modelTier);
+    const fallbacks = startIdx >= 0
+      ? TIER_ORDER.slice(startIdx + 1).map((t) => overlay.tiers[t]).filter((m): m is string => Boolean(m) && m !== primary)
+      : [];
+    const model = fallbacks.length ? { primary, fallbacks } : primary;
     const utility = overlay.tiers[merged.utility_model!] ?? merged.utility_model;
 
     // reports_to compiles into delegation allowlists — the org chart made real.
