@@ -24,6 +24,11 @@ id tepui >/dev/null 2>&1 || sudo useradd -r -m -d /srv/tepui -s /usr/sbin/nologi
 sudo usermod -aG docker tepui
 sudo mkdir -p /srv/tepui/state/config && sudo chown -R tepui:tepui /srv/tepui
 
+echo "==> repo dependencies (compile.ts imports yaml)"
+cd /srv/tepui/tepui-kite
+sudo env "PATH=/usr/local/node24/bin:$PATH" /usr/local/node24/bin/npm install --no-package-lock --omit=dev --silent
+sudo chown -R tepui:tepui /srv/tepui/tepui-kite/node_modules
+
 echo "==> sandbox image"
 sudo docker image inspect openclaw-sandbox:bookworm-slim >/dev/null 2>&1 \
   || sudo docker build -t openclaw-sandbox:bookworm-slim /srv/tepui/tepui-kite/runtime/openclaw/sandbox
