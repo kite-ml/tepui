@@ -19,7 +19,8 @@ so this digest reports **silence as a finding**, not as an absence of news.
 2. Run the collector from this skill's directory: `scripts/collect.mjs`.
    It prints a compact report: jobs run in the last 24h, spend per agent,
    loops that ran nothing, and what changed in agent memory.
-3. Post a SHORT digest to your Slack channel — under 15 lines:
+3. Reply with a SHORT digest — under 15 lines. Your final reply is delivered
+   to the Slack channel by the scheduler; do not try to post it yourself:
    - anything that FAILED or was refused over budget, first
    - loops that were silent (enabled but ran nothing), second
    - what ran and what it cost, compressed

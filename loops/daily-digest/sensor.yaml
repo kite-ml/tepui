@@ -8,5 +8,9 @@ sensors:
     # system event gets treated as heartbeat traffic and answered with "all
     # systems normal" instead of running the loop — observed live.
     session: isolated
+    # The scheduler delivers the run's final text to the owner's Slack channel.
+    # A cron session has no Slack tools of its own — announce IS the posting
+    # mechanism, so the skill just replies with the digest.
+    announce: true
     payload:
-      message: Use the daily-digest skill now, and post the digest to your Slack channel.
+      message: Use the daily-digest skill now. Your final reply IS the digest that gets posted.

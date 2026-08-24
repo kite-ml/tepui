@@ -404,6 +404,13 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
       else if (sn.every) { entry.kind = "every"; entry.every = sn.every; }
       else { fail(`loop '${loopName}' sensor '${sn.name}' has neither cron nor every`); continue; }
       if (sn.condition) entry.trigger_script = join("loops", loopName, sn.condition);
+      if (sn.announce) {
+        // The owner's first Slack channel receives the run's final text. The
+        // channel ID is company data, so it comes from the overlay, not core.
+        const ownerCh = (overlay.employees[policy.owner]?.slack_channels ?? [])[0];
+        if (ownerCh) entry.announce_channel = ownerCh;
+        else fail(`loop '${loopName}' sensor '${sn.name}' wants announce, but owner '${policy.owner}' has no slack_channels in the overlay`);
+      }
       sensors.push(entry);
     }
   }

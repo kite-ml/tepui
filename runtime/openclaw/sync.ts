@@ -54,11 +54,15 @@ export function sync(companyDir: string, { dryRun = false } = {}) {
     if (session === "main") args.push("--system-event", s.message);
     else {
       args.push("--message", s.message);
-      // Without this the CLI defaults to announce->last, which has no route
-      // for a scheduler-initiated run and fails the job after the work is
-      // done. Loops deliver through their own tools (files, Slack), not
-      // through cron delivery.
-      args.push("--no-deliver");
+      if (s.announce_channel) {
+        // The run's final text is delivered to this channel — for loops like
+        // the digest, announce IS the posting mechanism.
+        args.push("--announce", "--channel", s.announce_channel, "--best-effort-deliver");
+      } else {
+        // Without an explicit route the CLI defaults to announce->last, which
+        // fails a scheduler-initiated run after the work is done.
+        args.push("--no-deliver");
+      }
     }
     if (s.kind === "cron") { args.push("--cron", s.cron); if (s.tz) args.push("--tz", s.tz); }
     else if (s.kind === "every") { args.push("--every", s.every); }
