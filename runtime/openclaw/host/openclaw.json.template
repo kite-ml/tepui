@@ -15,5 +15,8 @@
     "entries": { "slack": { "enabled": true } }
   },
 
-  "cron": { "enabled": true }
+  "cron": {
+    "enabled": true,
+    "triggers": { "enabled": true }
+  }
 }
