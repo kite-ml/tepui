@@ -149,6 +149,11 @@ export function createProxy(opts: ProxyOpts) {
             "content-type": upRes.headers["content-type"] ?? "application/json",
           });
           const outChunks: Buffer[] = [];
+          // A destroyed upstream socket emits close WITHOUT end — if the
+          // client response is left dangling the caller hangs forever
+          // (observed as a hung test before it was ever observed in prod).
+          upRes.on("close", () => { if (!res.writableEnded) res.destroy(); });
+          upRes.on("error", () => { if (!res.writableEnded) res.destroy(); });
           upRes.on("data", (c) => { res.write(c); if (outChunks.length < 4096) outChunks.push(c); });
           upRes.on("end", () => {
             res.end();
@@ -177,9 +182,28 @@ export function createProxy(opts: ProxyOpts) {
           });
         },
       );
-      up.on("error", (e) => { res.writeHead(502, { "content-type": "application/json" }); res.end(JSON.stringify({ error: { message: `upstream: ${e.message}` } })); });
+      up.on("error", (e) => {
+        // An upstream socket can die AFTER the response started streaming —
+        // writeHead then throws and (observed live) an unhandled throw here
+        // took the whole gate down, and with it every model call. If headers
+        // are gone, all we can do is cut the client socket.
+        if (res.headersSent) { res.destroy(); return; }
+        res.writeHead(502, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: { message: `upstream: ${e.message}` } }));
+      });
+      req.on("error", () => { up.destroy(); });
+      res.on("error", () => { up.destroy(); });
       up.end(raw);
     });
+  });
+
+  // The gate must not die: a dead proxy blocks every model call (correctly —
+  // fail closed — but an outage is not a policy). Log and keep serving.
+  process.on("uncaughtException", (e) => {
+    console.error(`budget-proxy: uncaught (still serving): ${e?.stack ?? e}`);
+  });
+  process.on("unhandledRejection", (e) => {
+    console.error(`budget-proxy: unhandled rejection (still serving): ${e}`);
   });
 
   server.listen(opts.port, "127.0.0.1");

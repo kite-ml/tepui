@@ -109,3 +109,39 @@ test("extractUsage reads SSE streams", () => {
 test("estimateTokens rounds up", () => {
   assert.equal(estimateTokens("abcde"), 2);
 });
+
+test("an upstream that dies mid-stream does not kill the gate", async () => {
+  // Regression: an upstream socket error after headers were streamed hit a
+  // writeHead-after-send throw and took the whole proxy process down.
+  const dying = createServer((req, res) => {
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    res.write("data: {\"choices\":[]}\n\n");
+    setTimeout(() => res.destroy(), 30);      // cut the socket mid-stream
+  });
+  dying.listen(0, "127.0.0.1");
+  await once(dying, "listening");
+  const dyingPort = (dying.address() as any).port;
+
+  const p2 = createProxy({
+    port: 0 as any,
+    upstreamBase: `http://127.0.0.1:${dyingPort}/v1`,
+    apiKey: "k",
+    budgets: { ops: { per_run_usd: 1, per_day_usd: 2 } },
+    store: new MemoryStore(),
+    maxProjectedOutputTokens: 50,
+  });
+  await once(p2.server, "listening");
+  const p2port = (p2.server.address() as any).port;
+
+  // The request may error or come back truncated — either is fine. What must
+  // NOT happen is the proxy dying: it must still answer healthz afterwards.
+  await fetch(`http://127.0.0.1:${p2port}/a/ops/v1/chat/completions`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    signal: AbortSignal.timeout(3000),   // a hang here IS the regression
+    body: JSON.stringify({ model: "nemotron-3-nano-30b-a3b", max_tokens: 10, messages: [] }),
+  }).then((r) => r.text()).catch(() => "died-as-expected-client-side");
+
+  const health = await fetch(`http://127.0.0.1:${p2port}/healthz`);
+  assert.equal(health.status, 200, "the gate must survive an upstream mid-stream death");
+  p2.close(); dying.close();
+});
