@@ -115,8 +115,15 @@ export function createProxy(opts: ProxyOpts) {
       try { body = JSON.parse(Buffer.concat(chunks).toString("utf8")); }
       catch { res.writeHead(400); res.end("bad json"); return; }
 
-      const model = String(body.model ?? "");
-      const priceKey = isKnownModel(`${prefix}/${model}`) ? `${prefix}/${model}` : model;
+      // Normalize the model id for the upstream. The runtime prefixes ids with
+      // the per-agent provider id (nvidia-ops/...), and NVIDIA's endpoint
+      // requires exactly "nvidia/<model>" — a bare id 404s. The proxy owns
+      // this boundary, so it canonicalizes whatever arrives.
+      const rawModel = String(body.model ?? "");
+      const bare = rawModel.replace(new RegExp(`^${prefix}(-[a-z0-9-]+)?/`), "");
+      const upstreamModel = `${prefix}/${bare}`;
+      body.model = upstreamModel;
+      const priceKey = isKnownModel(upstreamModel) ? upstreamModel : rawModel;
 
       const inTok = estimateTokens(JSON.stringify(body.messages ?? body));
       const outTok = Number(body.max_tokens) || opts.maxProjectedOutputTokens || 8192;
@@ -125,7 +132,7 @@ export function createProxy(opts: ProxyOpts) {
       const decision = gate.check(agent, projected, priceKey);
       if (!decision.allow) { refuse(res, decision.code, decision.reason); return; }
 
-      const raw = Buffer.concat(chunks);
+      const raw = Buffer.from(JSON.stringify(body));
       const up = doRequest(
         `${upstream.origin}${upstream.pathname}/chat/completions`,
         {
