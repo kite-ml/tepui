@@ -13,7 +13,7 @@
  *      emitting something permissive. A compiler that warns is a compiler that
  *      gets ignored.
  */
-import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync, rmSync, cpSync, lstatSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
@@ -491,19 +491,26 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
     if (existsSync(boot)) rmSync(boot);
   }
 
-  // ---- loop skill links ----------------------------------------------------
+  // ---- loop skill copies ---------------------------------------------------
   // SKILL.md files live in core loops/, but the runtime only discovers skills
-  // inside an agent's workspace. Each enabled loop is therefore linked into its
-  // owner's workspace skills dir, with a RELATIVE symlink so the same link
-  // works in the template and in a private copy (identical layout).
+  // inside an agent's workspace — and it REFUSES symlinks that resolve outside
+  // the workspace root (a sensible escape control, observed live). So enabled
+  // loops are COPIED in, with a marker file so the compiler only ever
+  // overwrites its own copies: a skill an agent or human authored by hand in
+  // the same directory is never touched.
+  const MARKER = ".tepui-managed";
   for (const [loopName, policy] of Object.entries<any>(enabledLoops)) {
     const skillsDir = join(companyDir, "agents", policy.owner, "skills");
     mkdirSync(skillsDir, { recursive: true });
-    const linkPath = join(skillsDir, loopName);
-    if (!existsSync(linkPath)) {
-      // company/agents/<owner>/skills/<loop> -> ../../../../loops/<loop>
-      symlinkSync(join("..", "..", "..", "..", "loops", loopName), linkPath);
-    }
+    const dest = join(skillsDir, loopName);
+    const isOursOrAbsent =
+      !existsSync(dest) ||
+      existsSync(join(dest, MARKER)) ||
+      lstatSync(dest).isSymbolicLink();          // migrate away from old links
+    if (!isOursOrAbsent) continue;               // hand-authored: never touch
+    rmSync(dest, { recursive: true, force: true });
+    cpSync(join(loopsDir, loopName), dest, { recursive: true });
+    writeFileSync(join(dest, MARKER), "managed by runtime/openclaw/compile.ts — edits here are overwritten; edit loops/ instead\n");
   }
 
   const outDir = opts.outDir ?? join(companyDir, "generated");

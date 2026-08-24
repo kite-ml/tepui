@@ -26,10 +26,14 @@ archetypes:
   ops:
     title: Chief of Staff
     system_agent: true          # owns the heartbeat and the daily digest
-    sandbox: { mode: non-main, workspace_access: rw }
+    # mode off, not non-main: scheduled digest runs are ISOLATED sessions, and
+    # under non-main those are sandboxed — where the collector cannot reach the
+    # scheduler state it reports on. Observed live before this change.
+    sandbox: { mode: "off", workspace_access: rw }
     sandbox_justification: >
-      Runs reconcile and digest, which need host exec against the repos.
-      Holds no third-party credentials.
+      The operations agent: runs the digest collector against scheduler state
+      and git, and posts to Slack. Holds no third-party credentials, reads no
+      untrusted input directly (intake exists for that).
     tools: { profile: ops, deny: [image_generate, browser] }
     credentials: []
     budget: { per_run_usd: 0.75, per_day_usd: 6.00 }

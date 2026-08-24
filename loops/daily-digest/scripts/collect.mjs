@@ -13,7 +13,12 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(HERE, "../../..");                 // repo root
+// The skill runs from a managed COPY inside an agent workspace, so directory
+// depth is unreliable. The repo root comes from git — the same rule the
+// portability doc mandates for every script.
+let ROOT;
+try { ROOT = execFileSync("git", ["-C", HERE, "rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim(); }
+catch { ROOT = resolve(HERE, "../../.."); }
 const COMPANY = process.env.TEPUI_COMPANY ?? join(ROOT, "company");
 const sh = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8", timeout: 20_000 });
 

@@ -4,8 +4,9 @@ sensors:
     kind: schedule
     cron: "30 7 * * *"
     tz: Europe/London
-    # main session: the digest runs where ops talks to you, unsandboxed, so its
-    # collector can read the scheduler state and post to Slack.
-    session: main
+    # isolated: a direct instruction the agent must act on. A main-session
+    # system event gets treated as heartbeat traffic and answered with "all
+    # systems normal" instead of running the loop — observed live.
+    session: isolated
     payload:
-      message: Run the daily-digest loop now.
+      message: Use the daily-digest skill now, and post the digest to your Slack channel.
