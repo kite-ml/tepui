@@ -67,7 +67,8 @@ export function sync(companyDir: string, { dryRun = false } = {}) {
       if (s.announce_channel) {
         // The run's final text is delivered to this channel — for loops like
         // the digest, announce IS the posting mechanism.
-        args.push("--announce", "--channel", s.announce_channel, "--best-effort-deliver");
+        // --channel is the channel TYPE; --to is the destination within it.
+        args.push("--announce", "--channel", "slack", "--to", s.announce_channel, "--best-effort-deliver");
       } else {
         // Without an explicit route the CLI defaults to announce->last, which
         // fails a scheduler-initiated run after the work is done.
