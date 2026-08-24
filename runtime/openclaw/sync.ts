@@ -52,7 +52,14 @@ export function sync(companyDir: string, { dryRun = false } = {}) {
     // session jobs take a system event, which the agent's heartbeat processes
     // in its own conversation context.
     if (session === "main") args.push("--system-event", s.message);
-    else args.push("--message", s.message);
+    else {
+      args.push("--message", s.message);
+      // Without this the CLI defaults to announce->last, which has no route
+      // for a scheduler-initiated run and fails the job after the work is
+      // done. Loops deliver through their own tools (files, Slack), not
+      // through cron delivery.
+      args.push("--no-deliver");
+    }
     if (s.kind === "cron") { args.push("--cron", s.cron); if (s.tz) args.push("--tz", s.tz); }
     else if (s.kind === "every") { args.push("--every", s.every); }
     if (s.trigger_script) args.push("--trigger-script", join(ROOT, s.trigger_script));
