@@ -19,9 +19,11 @@ jobs:
       # Without this, generated/ silently drifts from its sources and the
       # "permission changes are a reviewable diff" property quietly dies.
       - name: Compiler is idempotent
+        # The template ships no company/ overlay, so use the example one.
         run: |
+          [ -d company ] || cp -r company.example company
           pnpm compile
-          git diff --exit-code -- ../tepui-company/generated || {
+          git diff --exit-code -- company/generated || {
             echo "::error::compile is not idempotent — generated/ changed on a clean run"
             exit 1
           }

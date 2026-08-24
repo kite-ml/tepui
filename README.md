@@ -85,7 +85,7 @@ Everything is markdown in git. That is not an aesthetic preference — it's what
 
 Git stays the source of truth, enforced by a **read-only mount**: everything the runtime must never mutate is mounted `:ro`, so a config write from inside fails with `FsSafeError` and the only way to change an agent's permissions is a commit.
 
-> We originally relied on OpenClaw's documented "includes fail closed for its own writes." **Phase 0 testing falsified that** — with a writable mount the runtime disabled the quarantine agent's sandbox live, without a restart. Filesystem permissions are the stronger mechanism. See [the decision record](../tepui-company/decisions/2026-08-21-git-truth-enforced-by-mount.md).
+> We originally relied on OpenClaw's documented "includes fail closed for its own writes." **Phase 0 testing falsified that** — with a writable mount the runtime disabled the quarantine agent's sandbox live, without a restart. Filesystem permissions are the stronger mechanism. See [the decision record](company/decisions/2026-08-21-git-truth-enforced-by-mount.md).
 
 ### Pillar 1 — Context: the company brain
 
@@ -168,7 +168,7 @@ tepui-core/                   ← PUBLIC, MIT, zero company facts
     ├── openclaw/             ← config profiles · compile · sync · plugin · workflows
     └── claude/               ← the escape hatch, kept working
 
-tepui-company/                ← PRIVATE — and this IS the agents' workspace root
+company/                      ← PRIVATE — and this IS the agents' workspace root
 ├── core.lock                 ← pinned core SHA + sha256 blob digests
 ├── org.overlay.yaml          ← names, models, channels
 ├── generated/*.json5         ← committed compiler output — the $include target

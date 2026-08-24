@@ -12,7 +12,7 @@
 | Name | **tepui** — Venezuelan table mountains; an ancient platform |
 | **Runtime plane** | **OpenClaw gateway**, self-hosted on a small VPS |
 | **CI plane** | GitHub Actions — never runs a loop, only proves loops are correct and that the box matches git |
-| Split | Public `tepui-core` (MIT, no company facts) + private `tepui-company` |
+| Split | Public template (MIT, no company facts) + a private repo that pulls from it as `upstream` |
 | Source of truth | **Git**, enforced structurally via OpenClaw's `$include` fail-closed semantics |
 | First loops | Analyst/PostHog, then Marketing/design assets |
 | Portability insurance | `adapters/claude/` stays — now the escape hatch rather than the primary path |
@@ -36,7 +36,7 @@ What we get without building it:
 
 **And git-as-truth is enforced — by the operating system.**
 
-> ⚠️ **Corrected 2026-08-21 by empirical test.** An earlier draft justified this choice on OpenClaw's documented *"includes fail closed for OpenClaw-owned writes."* **That does not hold for `config set`.** Against a live gateway with a writable mount, the runtime rewrote the `$include`d `generated/agents.json5` in place and applied it **live without a restart** — flipping `intake.sandbox.mode` from `all` to `off`, disabling the sandbox on the quarantine agent. See [decisions/2026-08-21-git-truth-enforced-by-mount.md](../tepui-company/decisions/2026-08-21-git-truth-enforced-by-mount.md).
+> ⚠️ **Corrected 2026-08-21 by empirical test.** An earlier draft justified this choice on OpenClaw's documented *"includes fail closed for OpenClaw-owned writes."* **That does not hold for `config set`.** Against a live gateway with a writable mount, the runtime rewrote the `$include`d `generated/agents.json5` in place and applied it **live without a restart** — flipping `intake.sandbox.mode` from `all` to `off`, disabling the sandbox on the quarantine agent. See [decisions/2026-08-21-git-truth-enforced-by-mount.md](company/decisions/2026-08-21-git-truth-enforced-by-mount.md).
 
 The mechanism is a **split mount** instead. Everything the runtime must never mutate is mounted read-only; only agent workspaces, loop memory, and decisions are writable. The same write then fails with `FsSafeError`.
 
@@ -181,7 +181,7 @@ tepui-core/
     └── claude/                       # the escape hatch, kept working
 ```
 
-**`tepui-company`** — private, cloned to `~/.openclaw/tepui`. **This repo IS the agents' workspace root**, which makes layer 5 git-native for free:
+**`company/`** — private, cloned to `~/.openclaw/tepui`. **This repo IS the agents' workspace root**, which makes layer 5 git-native for free:
 
 ```
 tepui/

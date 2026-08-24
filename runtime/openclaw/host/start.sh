@@ -8,8 +8,8 @@
 #     docker.sock, which hands host control to anything that escapes the
 #     sandbox — the exact thing the sandbox exists to prevent
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"          # tepui-core
-COMPANY="$(cd "$ROOT/../tepui-company" && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"          # repo root
+COMPANY="$(cd "${TEPUI_COMPANY:-$ROOT/company}" && pwd)"
 CONFIG_DIR="${TEPUI_CONFIG_DIR:-/tmp/tepui-host/config}"
 STATE_DIR="${TEPUI_STATE_DIR:-/tmp/tepui-host/state}"
 

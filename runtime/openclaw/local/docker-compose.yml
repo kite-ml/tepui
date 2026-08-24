@@ -30,11 +30,11 @@ services:
       # So git-as-truth is enforced by FILESYSTEM PERMISSIONS, not by the app's
       # good behaviour. Config the runtime must never mutate is mounted :ro;
       # only the agent workspaces and loop memory are writable.
-      - ../../../../tepui-company/generated:/home/node/.openclaw/repos/tepui-company/generated:ro
-      - ../../../../tepui-core:/home/node/.openclaw/repos/tepui-core:ro
-      - ../../../../tepui-company/agents:/home/node/.openclaw/repos/tepui-company/agents
-      - ../../../../tepui-company/loops:/home/node/.openclaw/repos/tepui-company/loops
-      - ../../../../tepui-company/decisions:/home/node/.openclaw/repos/tepui-company/decisions
+      - ../../../company/generated:/home/node/.openclaw/repos/company/generated:ro
+      - ../../..:/home/node/.openclaw/repos/core:ro
+      - ../../../company/agents:/home/node/.openclaw/repos/company/agents
+      - ../../../company/loops:/home/node/.openclaw/repos/company/loops
+      - ../../../company/decisions:/home/node/.openclaw/repos/company/decisions
     environment:
       - OPENCLAW_CONFIG_PATH=/home/node/.openclaw/openclaw.json
       # No credentials here. Real secrets come from .env, which is gitignored.

@@ -1,0 +1,94 @@
+# EXAMPLE overlay. Copy to company/ and edit.
+# Company-specific facts belong ONLY here and in company/ — CI enforces it.
+# Private overlay — names, models, channels, credentials.
+# The public core declares ROLES; this file makes them concrete.
+version: 1
+
+# Model provider. The API key itself is NEVER here — it resolves from the
+# gitignored .env at runtime via ${NVIDIA_API_KEY}.
+# Where the agent workspaces live ON THE HOST RUNNING THE GATEWAY. This is the
+# only host-specific value in the overlay, and it is why moving to a Mac mini
+# is a one-line change rather than a migration.
+#   docker (this laptop / GCP VM): /home/node/.openclaw/repos/tepui-company
+#   Mac mini or bare metal:        /Users/<you>/company-os/tepui-company
+paths:
+  workspace_root: /home/node/.openclaw/repos/company
+
+provider:
+  id: nvidia
+  api: openai-completions
+  base_url: https://integrate.api.nvidia.com/v1
+  api_key_env: MODEL_API_KEY
+  # EVALUATION TIER. NVIDIA's API Trial ToS permits internal testing and
+  # evaluation only; it collects prompts AND outputs as training data (3.3.iv)
+  # and prohibits personal, financial, health and governmental information
+  # (4.3). Rate limit is ~40 RPM and cannot be raised.
+  #
+  # The compiler REFUSES to build if any loop is marked handles_company_data
+  # while this is set, so "we will switch before it matters" is enforced rather
+  # than remembered. See decisions/2026-08-21-nvidia-evaluation-only.md
+  tier: evaluation
+  # Nemotron reasoning models stream well past the ~120s default idle watchdog.
+  # Observed live: a retry loop that produced no output and billed twice.
+  timeout_seconds: 600
+
+# The Nemotron 3 family maps cleanly onto the three tiers. All three were
+# verified to emit well-formed tool_calls, which is the bar for driving agents.
+# Note the token economics invert: on the same task nano spent 145 completion
+# tokens, super 79, ultra 64 — the larger models are more decisive, which
+# partly offsets their higher per-token price. Measure before assuming nano is
+# cheaper for a given loop.
+tiers:
+  tier1: nvidia/nemotron-3-ultra-550b-a55b
+  tier2: nvidia/nemotron-3-super-120b-a12b
+  tier3: nvidia/nemotron-3-nano-30b-a3b
+
+employees:
+  # SHARED-APP MODE. One Slack integration for the whole company; the CHANNEL
+  # decides which agent answers. Two tokens total (SLACK_BOT_TOKEN and
+  # SLACK_APP_TOKEN), not two per agent.
+  #
+  # ops is slack_default, so it answers anywhere the app is invited unless a
+  # narrower channel rule claims that channel. Add slack_channels to an agent
+  # to give it a dedicated room.
+  #
+  # To promote ONE agent to its own @handle later, give it slack_account:
+  # <name> — that is the whole change, and it needs a second Slack app.
+  ops:
+    archetype: ops
+    name: Ops
+    slack_default: true         # catch-all: answers wherever the app is invited
+
+  # Credentials are granted only when a loop declares the need. The compiler
+  # refuses any grant broader than what its loops actually use, so these stay
+  # empty until the analyst and marketing loops land in Phase 2 and 3.
+  analyst:
+    archetype: analyst
+    name: Analyst
+    slack_channels: []          # add the #analytics channel ID (C...) to route here
+
+  marketing:
+    archetype: marketing
+    name: Marketing
+    slack_channels: []          # add the #marketing channel ID (C...) to route here
+
+  designer:
+    archetype: designer
+    name: Designer
+    slack_channels: []          # add the #design channel ID (C...) to route here
+
+  video-editor:
+    archetype: video_editor
+    name: Video Editor
+    slack_channels: []          # add the #video channel ID (C...) to route here
+
+  # intake gets NO Slack handle on purpose. It is reached by delegation from
+  # ops, never addressed directly — the quarantine agent should not be a
+  # surface anyone can hand text to.
+  intake:
+    archetype: intake
+    name: Intake
+
+loops:
+  hello-world:
+    enabled: true

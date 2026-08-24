@@ -512,7 +512,7 @@ const invokedDirectly =
   process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 if (invokedDirectly) {
 const args = process.argv.slice(2);
-const companyDir = resolve(args.find((a) => !a.startsWith("--")) ?? "../tepui-company");
+const companyDir = resolve(args.find((a) => !a.startsWith("--")) ?? "./company");
 const flag = (n: string) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : undefined; };
 try {
   const r = compile(companyDir, { workspaceRoot: flag("workspace-root"), outDir: flag("out") });
