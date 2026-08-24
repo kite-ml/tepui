@@ -22,10 +22,13 @@ ENV_FILE="$ROOT/runtime/openclaw/local/.env"
 [[ -f "$ENV_FILE" ]] || { echo "✗ missing $ENV_FILE"; exit 1; }
 set -a; source "$ENV_FILE"; set +a
 
-# Compile fresh so the running config always matches git.
+# Compile fresh so the running config always matches git — ONCE, into the
+# committed company/generated (the reviewable artifact), then copied to the
+# config dir the gateway reads. Two separate compile targets once drifted:
+# sync read a stale sensors.json and reconciled last week's schedule.
 mkdir -p "$CONFIG_DIR/generated" "$STATE_DIR"
-node "$ROOT/runtime/openclaw/compile.ts" "$COMPANY" \
-  --workspace-root "$COMPANY" --out "$CONFIG_DIR/generated"
+node "$ROOT/runtime/openclaw/compile.ts" "$COMPANY" --workspace-root "$COMPANY"
+cp -R "$COMPANY/generated/." "$CONFIG_DIR/generated/"
 
 # The config stub holds no secrets, so it is regenerated every start from the
 # template — no drift, and a fresh machine needs zero hand-editing.
