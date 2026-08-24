@@ -21,8 +21,8 @@
   // on a missing secret — correct, but it should not take the whole company OS
   // down while a token is still being minted. deploy/slack/finish-setup.sh
   // uncomments these two lines after it has verified the token with Slack.
-  // "channels":{ "$include": "./repos/tepui-company/generated/channels.json5" },
-  // "bindings":{ "$include": "./repos/tepui-company/generated/bindings.json5" },
+  "channels":{ "$include": "./repos/tepui-company/generated/channels.json5" },
+  "bindings":{ "$include": "./repos/tepui-company/generated/bindings.json5" },
 
   // The Slack channel is a PLUGIN and is not bundled in core. OpenClaw only
   // searches its own stock extensions dir, so a global npm install is invisible

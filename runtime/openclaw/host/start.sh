@@ -37,9 +37,27 @@ if lsof -ti:18888 >/dev/null 2>&1; then
   echo "→ stopping the running gateway"; lsof -ti:18888 | xargs kill -9; sleep 2
 fi
 
-OCM=$(npm root -g)/openclaw/openclaw.mjs
+# Resolve openclaw explicitly. `npm root -g` is unreliable here: we prepend a
+# pinned Node to PATH for the version requirement, which makes npm report THAT
+# install's global root rather than the one openclaw actually lives in.
+OCM=""
+for CAND in \
+  "/opt/homebrew/lib/node_modules/openclaw/openclaw.mjs" \
+  "/usr/local/lib/node_modules/openclaw/openclaw.mjs" \
+  "$(npm root -g 2>/dev/null)/openclaw/openclaw.mjs"; do
+  [[ -f "$CAND" ]] && { OCM="$CAND"; break; }
+done
+[[ -n "$OCM" ]] || { echo "✗ openclaw.mjs not found — npm install -g openclaw@2026.7.1"; exit 1; }
 echo "→ starting gateway (config: $OPENCLAW_CONFIG_PATH)"
 nohup node "$OCM" gateway > "$STATE_DIR/gateway.log" 2>&1 &
-until grep -q '\[gateway\] ready' "$STATE_DIR/gateway.log" 2>/dev/null; do sleep 1; done
+# Wait for readiness, but fail loudly instead of hanging forever if it crashes.
+for _ in $(seq 1 90); do
+  grep -q '\[gateway\] ready' "$STATE_DIR/gateway.log" 2>/dev/null && break
+  if grep -qE 'Error:|failed to start' "$STATE_DIR/gateway.log" 2>/dev/null; then
+    echo "✗ gateway failed to start:"; tail -12 "$STATE_DIR/gateway.log"; exit 1
+  fi
+  sleep 1
+done
+grep -q '\[gateway\] ready' "$STATE_DIR/gateway.log" || { echo "✗ timed out"; tail -12 "$STATE_DIR/gateway.log"; exit 1; }
 echo "✓ ready — log: $STATE_DIR/gateway.log"
 grep -iE 'slack|channel' "$STATE_DIR/gateway.log" | tail -3 || true
