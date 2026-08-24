@@ -29,12 +29,23 @@ node "$ROOT/runtime/openclaw/compile.ts" "$COMPANY" \
 
 # The config stub holds no secrets, so it is regenerated every start from the
 # template — no drift, and a fresh machine needs zero hand-editing.
+# Gateway auth: without a configured token the gateway mints a random one per
+# boot and the CLI (which sync depends on) cannot connect. Generate once,
+# persist in the gitignored .env, substitute into the config each start.
+if ! grep -q '^GATEWAY_TOKEN=' "$ENV_FILE"; then
+  echo "GATEWAY_TOKEN=$(openssl rand -hex 24)" >> "$ENV_FILE"
+  echo "→ generated gateway auth token into .env"
+fi
+GATEWAY_TOKEN=$(grep '^GATEWAY_TOKEN=' "$ENV_FILE" | cut -d= -f2)
+export OPENCLAW_GATEWAY_TOKEN="$GATEWAY_TOKEN"
+
 SLACK_PLUGIN=""
 for CAND in /opt/homebrew/lib/node_modules/@openclaw/slack /usr/local/lib/node_modules/@openclaw/slack; do
   [[ -d "$CAND" ]] && { SLACK_PLUGIN="$CAND"; break; }
 done
-sed "s|__SLACK_PLUGIN_PATH__|$SLACK_PLUGIN|" \
+sed -e "s|__SLACK_PLUGIN_PATH__|$SLACK_PLUGIN|" -e "s|__GATEWAY_TOKEN__|$GATEWAY_TOKEN|" \
   "$ROOT/runtime/openclaw/host/openclaw.json.template" > "$CONFIG_DIR/openclaw.json"
+chmod 600 "$CONFIG_DIR/openclaw.json"
 if [[ -z "$SLACK_PLUGIN" ]]; then
   echo "⚠ slack plugin not installed — channel will warn until: npm i -g @openclaw/slack@2026.7.1"
 fi

@@ -1,5 +1,8 @@
 {
-  "gateway": { "mode": "local", "bind": "loopback", "port": 18888 },
+  "gateway": {
+    "mode": "local", "bind": "loopback", "port": 18888,
+    "auth": { "mode": "token", "token": "__GATEWAY_TOKEN__" }
+  },
 
   "agents": { "$include": "./generated/agents.json5" },
   "skills": { "$include": "./generated/skills.json5" },
