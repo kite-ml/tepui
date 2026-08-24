@@ -13,7 +13,8 @@
     "test": "node --test test/*.test.ts",
     "sync": "node runtime/openclaw/sync.ts",
     "doctor": "bash runtime/openclaw/host/doctor.sh",
-    "start": "bash runtime/openclaw/host/start.sh"
+    "start": "bash runtime/openclaw/host/start.sh",
+    "eval": "node runtime/openclaw/eval.ts"
   },
   "dependencies": {
     "yaml": "^2.6.1"

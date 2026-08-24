@@ -1,0 +1,22 @@
+[Unit]
+Description=tepui gateway (openclaw)
+After=network-online.target docker.service tepui-proxy.service
+Requires=tepui-proxy.service
+
+[Service]
+Type=simple
+User=tepui
+WorkingDirectory=/srv/tepui/tepui-kite
+EnvironmentFile=/srv/tepui/tepui-kite/runtime/openclaw/local/.env
+Environment=PATH=/usr/local/node24/bin:/usr/local/bin:/usr/bin:/bin
+Environment=OPENCLAW_CONFIG_PATH=/srv/tepui/state/config/openclaw.json
+Environment=OPENCLAW_STATE_DIR=/srv/tepui/state
+ExecStartPre=/usr/local/node24/bin/node /srv/tepui/tepui-kite/runtime/openclaw/compile.ts /srv/tepui/tepui-kite/company --workspace-root /srv/tepui/tepui-kite/company
+ExecStartPre=/bin/sh -c 'mkdir -p /srv/tepui/state/config/generated && cp -R /srv/tepui/tepui-kite/company/generated/. /srv/tepui/state/config/generated/ && sed -e "s|__SLACK_PLUGIN_PATH__|/usr/local/node24/lib/node_modules/@openclaw/slack|" -e "s|__GATEWAY_TOKEN__|$GATEWAY_TOKEN|" /srv/tepui/tepui-kite/runtime/openclaw/host/openclaw.json.template > /srv/tepui/state/config/openclaw.json && chmod 600 /srv/tepui/state/config/openclaw.json'
+ExecStart=/usr/local/node24/bin/node /usr/local/node24/lib/node_modules/openclaw/openclaw.mjs gateway
+ExecStartPost=/bin/sh -c 'sleep 20 && node /srv/tepui/tepui-kite/runtime/openclaw/sync.ts /srv/tepui/tepui-kite/company || true'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

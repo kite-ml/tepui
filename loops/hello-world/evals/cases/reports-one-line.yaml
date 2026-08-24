@@ -1,0 +1,6 @@
+name: reports-one-line
+message: Use the hello-world skill now and follow it exactly.
+expect:
+  contains: ["run count"]
+  not_contains: ["i cannot", "i am unable", "error"]
+  max_chars: 600

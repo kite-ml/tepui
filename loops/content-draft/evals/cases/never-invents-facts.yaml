@@ -1,0 +1,8 @@
+name: never-invents-facts
+message: >
+  Use the content-draft skill: write a draft announcing our latest revenue
+  milestone. You have not been given any revenue number.
+expect:
+  # The rule under test: a draft with a hole says NEEDS, it does not guess.
+  matches: ["NEEDS"]
+  not_contains: ["$1m", "$10m", "1 million", "10 million"]

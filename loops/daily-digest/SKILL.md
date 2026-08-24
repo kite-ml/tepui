@@ -25,6 +25,8 @@ so this digest reports **silence as a finding**, not as an absence of news.
    - loops that were silent (enabled but ran nothing), second
    - what ran and what it cost, compressed
    - one line: what was learned yesterday, if anything
+   - decisions whose review date has arrived, if any — these are questions to
+     the humans ("we decided X on date Y; did it work?"), not agent work
 4. If a section of the collector output is missing, say so plainly
    ("no spend data") rather than guessing.
 

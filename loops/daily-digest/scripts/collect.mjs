@@ -76,6 +76,23 @@ try {
   out.push("", "## declared sensors", ...sensors.map((s) => `- ${s.key} (${s.kind})`));
 } catch { out.push("", "## declared sensors", "- MISSING: generated/sensors.json"); }
 
+// ── decisions due for review ───────────────────────────────────────────────
+// Every decision record carries a review_on date: the day we check whether it
+// actually worked. Most organizations never do this; the digest makes
+// forgetting the harder path.
+try {
+  const decDir = join(COMPANY, "decisions");
+  const due = [];
+  for (const f of readdirSync(decDir).filter((f) => f.endsWith(".md"))) {
+    const txt = readFileSync(join(decDir, f), "utf8");
+    const m = txt.match(/^review_on:\s*(\d{4}-\d{2}-\d{2})/m);
+    const st = txt.match(/^status:\s*(\S+)/m)?.[1] ?? "?";
+    if (m && m[1] <= day && st !== "superseded") due.push(`- ${f} (review was due ${m[1]}, status ${st})`);
+  }
+  out.push("", "## decisions due for review");
+  out.push(...(due.length ? due : ["- none"]));
+} catch { out.push("", "## decisions due for review", "- MISSING: no decisions/ directory"); }
+
 // ── what was learned (agent memory changes in the last day) ────────────────
 try {
   const diff = sh("git", ["-C", COMPANY, "log", "--since=26 hours ago", "--name-only",

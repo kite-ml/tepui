@@ -125,3 +125,5 @@ test("an unpriced Nemotron variant still fails closed", () => {
   const g = new BudgetGate(new MemoryStore(), { x: { per_run_usd: 1, per_day_usd: 1 } }, () => "2026-08-21");
   assert.equal(g.check("x", 100, "nvidia/nemotron-9-imaginary").allow, false);
 });
+
+// evals assertion engine — pure, so it is tested here rather than live

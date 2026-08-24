@@ -1,0 +1,17 @@
+# The spend gate. The gateway unit depends on it: an unmetered gateway is the
+# failure the gate exists to prevent, so the ordering is load-bearing.
+[Unit]
+Description=tepui budget proxy (spend gate)
+After=network-online.target
+
+[Service]
+Type=simple
+User=tepui
+EnvironmentFile=/srv/tepui/tepui-kite/runtime/openclaw/local/.env
+Environment=TEPUI_SPEND_DIR=/srv/tepui/tepui-kite/company/spend
+ExecStart=/usr/local/node24/bin/node /srv/tepui/tepui-kite/runtime/openclaw/proxy/budget-proxy.ts /srv/tepui/tepui-kite/company
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
