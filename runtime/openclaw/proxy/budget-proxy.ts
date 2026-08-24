@@ -191,7 +191,9 @@ import { resolve, join } from "node:path";
 import { readFileSync } from "node:fs";
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
   const companyDir = resolve(process.argv[2] ?? "company");
-  const budgetsFile = JSON.parse(readFileSync(join(companyDir, "generated", "budgets.json"), "utf8"));
+  // Generated files carry a provenance banner; parse from the first brace.
+  const budgetsRaw = readFileSync(join(companyDir, "generated", "budgets.json"), "utf8");
+  const budgetsFile = JSON.parse(budgetsRaw.slice(budgetsRaw.indexOf("{")));
   const apiKey = process.env.NVIDIA_API_KEY ?? "";
   if (!apiKey) { console.error("budget-proxy: NVIDIA_API_KEY not set"); process.exit(1); }
   const { FileStore } = await import("../../../lib/budget/file-store.ts");
