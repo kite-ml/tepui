@@ -40,14 +40,19 @@ export function sync(companyDir: string, { dryRun = false } = {}) {
 
   const actions: string[] = [];
   for (const s of desired) {
+    const session = s.session ?? "isolated";
     const args = [
       "cron", "add", "--json",
       "--declaration-key", s.key,
       "--name", s.key,
       "--agent", s.agent,
-      "--session", s.session ?? "isolated",
-      "--message", s.message,
+      "--session", session,
     ];
+    // This version's contract: isolated jobs take an agent message; main-
+    // session jobs take a system event, which the agent's heartbeat processes
+    // in its own conversation context.
+    if (session === "main") args.push("--system-event", s.message);
+    else args.push("--message", s.message);
     if (s.kind === "cron") { args.push("--cron", s.cron); if (s.tz) args.push("--tz", s.tz); }
     else if (s.kind === "every") { args.push("--every", s.every); }
     if (s.trigger_script) args.push("--trigger-script", join(ROOT, s.trigger_script));
