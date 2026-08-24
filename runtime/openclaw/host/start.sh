@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Run the gateway ON THE HOST, with Docker beside it for sandboxing.
+#
+# This is the shape that actually works, and the shape the GCP VM runs:
+#   - agent tool execution is sandboxed in throwaway containers, which needs
+#     the gateway to reach a Docker daemon
+#   - putting the gateway itself in a container would require mounting
+#     docker.sock, which hands host control to anything that escapes the
+#     sandbox — the exact thing the sandbox exists to prevent
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"          # tepui-core
+COMPANY="$(cd "$ROOT/../tepui-company" && pwd)"
+CONFIG_DIR="${TEPUI_CONFIG_DIR:-/tmp/tepui-host/config}"
+STATE_DIR="${TEPUI_STATE_DIR:-/tmp/tepui-host/state}"
+
+# Node >= 24.15 is required by openclaw; the system node may be older.
+if [[ -x /tmp/node24/bin/node ]]; then export PATH="/tmp/node24/bin:$PATH"; fi
+command -v node >/dev/null || { echo "✗ node not found"; exit 1; }
+
+# Secrets come from the gitignored .env — never from the repo, never from argv.
+ENV_FILE="$ROOT/runtime/openclaw/local/.env"
+[[ -f "$ENV_FILE" ]] || { echo "✗ missing $ENV_FILE"; exit 1; }
+set -a; source "$ENV_FILE"; set +a
+
+# Compile fresh so the running config always matches git.
+mkdir -p "$CONFIG_DIR/generated" "$STATE_DIR"
+node "$ROOT/runtime/openclaw/compile.ts" "$COMPANY" \
+  --workspace-root "$COMPANY" --out "$CONFIG_DIR/generated"
+
+docker image inspect openclaw-sandbox:bookworm-slim >/dev/null 2>&1 \
+  || { echo "→ building sandbox image (first run only)"; docker build -t openclaw-sandbox:bookworm-slim "$ROOT/runtime/openclaw/sandbox"; }
+
+export OPENCLAW_CONFIG_PATH="$CONFIG_DIR/openclaw.json"
+export OPENCLAW_STATE_DIR="$STATE_DIR"
+
+if lsof -ti:18888 >/dev/null 2>&1; then
+  echo "→ stopping the running gateway"; lsof -ti:18888 | xargs kill -9; sleep 2
+fi
+
+OCM=$(npm root -g)/openclaw/openclaw.mjs
+echo "→ starting gateway (config: $OPENCLAW_CONFIG_PATH)"
+nohup node "$OCM" gateway > "$STATE_DIR/gateway.log" 2>&1 &
+until grep -q '\[gateway\] ready' "$STATE_DIR/gateway.log" 2>/dev/null; do sleep 1; done
+echo "✓ ready — log: $STATE_DIR/gateway.log"
+grep -iE 'slack|channel' "$STATE_DIR/gateway.log" | tail -3 || true

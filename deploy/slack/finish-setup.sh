@@ -45,17 +45,23 @@ echo "  ✓ saved to .env (mode 600, gitignored)"
 # Activate the Slack channel now that the token is verified. Until this point
 # the includes stay commented out, because the gateway fails closed on a
 # missing secret and that would take the whole company OS down.
-CFG="$(cd "$(dirname "$0")/../../runtime/openclaw/local" && pwd)/state/openclaw.json"
-if [[ -f "$CFG" ]] && grep -q '^\s*// "channels"' "$CFG"; then
+# Activate in every gateway config we know about: the container one and the
+# host one (the host is the shape that can sandbox, and the shape the VM runs).
+CFGS=(
+  "$(cd "$(dirname "$0")/../../runtime/openclaw/local" && pwd)/state/openclaw.json"
+  "/tmp/tepui-host/config/openclaw.json"
+)
+for CFG in "${CFGS[@]}"; do
+  [[ -f "$CFG" ]] || continue
+  grep -q '^[[:space:]]*// "channels"' "$CFG" || continue
   python3 - "$CFG" <<'EOF'
 import sys, re
 p = sys.argv[1]; s = open(p).read()
 s = re.sub(r'^(\s*)// ("(?:channels|bindings)":)', r'\1\2', s, flags=re.M)
 open(p, "w").write(s)
 EOF
-  echo "  ✓ Slack channel activated in the gateway config"
-  echo "    restart with: cd runtime/openclaw/local && docker compose restart gateway"
-fi
+  echo "  ✓ Slack activated in $CFG"
+done
 
 echo
 echo "→ channels the app can see (paste these IDs into org.overlay.yaml):"
