@@ -226,6 +226,8 @@ Full detail, with current pricing: [docs/cost.md](docs/cost.md).
 | Project | What it is | How we use it |
 |---|---|---|
 | [OpenClaw](https://github.com/openclaw/openclaw) | Self-hosted agent runtime — gateway, scheduler, channels, per-agent capability isolation, 386k★, MIT | **The runtime.** Supplies four things this project would otherwise build badly: capability policy enforced before the model call, condition triggers that poll without a model call, native approval gates with operand binding, and per-agent + per-job model routing |
+> **"Isn't this just an OpenClaw config?"** Fair question — [docs/what-is-openclaw.md](docs/what-is-openclaw.md) answers it file by file. Short version: 28% of the repo is the OpenClaw adapter, 72% survives a runtime change, and only ~39 lines are actual OpenClaw settings.
+
 | [Lobster](https://github.com/openclaw/lobster) | OpenClaw's workflow format | Layer 3 + the approval gates. Has a standalone CLI, so it stays portable |
 | [Paperclip](https://github.com/paperclipai/paperclip) | Control plane for agent companies, 79k★, MIT | **Patterns, not code.** Its `cost_events` attribution schema is the best thing in it and becomes our plugin's output format; its execution-policy stage vocabulary names our approval states |
 | [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Agent runtime with persistent memory, 232k★, MIT | Design precedent for skills as procedural memory |
