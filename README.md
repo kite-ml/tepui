@@ -19,18 +19,20 @@ In a human company those live in job descriptions, budgets, and management. tepu
 
 The goal is a small company that gets more done per person, safely: agents do the repetitive work and prepare drafts; people decide, approve, and handle everything genuinely new.
 
+There is a longer game too. **The future value of a company will be the context it gathers — about its customers, its market, its own decisions and their outcomes — and how it uses that context, at scale, to make the next decisions.** Software is becoming cheap to regenerate; accumulated context is not. tepui is built for that: everything the agents learn and every decision made lands as plain files in a repo you own, not inside a vendor's product. Companies that own their own intelligence get to compound it. Companies that rent it start over every time they switch tools.
+
 ## Status — read this before adopting
 
 **Works today**, verified against a live gateway:
 
 - **Org chart as code.** Describe your agents in `org.yaml`; one command turns that into a running system.
 - **Real permission boundaries.** An agent without a tool never even sees that the tool exists, so it cannot be talked into using it. Checked by 33 tests that refuse unsafe configurations.
-- **Spending caps.** Every job has a per-run and per-day price limit. A run that would exceed it is refused before any money is spent.
 - **Slack.** One app; you talk to agents in channels.
 - **Deploys anywhere.** The same setup runs on a laptop, a small cloud VM, or a Mac mini.
 
 **Not built yet:**
 
+- **live spending enforcement.** Caps are declared per agent and per job, and the refusal logic is written and tested — but it is not yet wired into the running gateway. Until that lands, treat the caps as documentation. Top of the roadmap.
 - the learning step of loops (`memory/` exists; nothing reads it back yet)
 - automatic quality checks on loop output (`evals/`)
 - the library of ready-made business loops — only `hello-world` ships
@@ -91,7 +93,7 @@ A loop is not a chat. It wakes on its own, does the job, saves a draft, and stop
 
 1. **Missing tools, not rules.** Agents are constrained by what they physically have, not by instructions. Instructions can be argued with; a tool that was never offered cannot.
 2. **A padded room for outside text.** Anything reading tickets, inbound email, or web pages runs as an agent that holds nothing and can act on nothing. Verified live: fed a malicious message demanding it leak keys, it had one read-only status tool and nothing else.
-3. **Money has a ceiling.** Per-run and per-day caps, enforced before the model is called. An unattended agent burning a fortune overnight is a documented industry failure; the cap is the circuit breaker.
+3. **Money gets a ceiling.** Every job declares a per-run and per-day price cap, checked before the model is called — an unattended agent burning a fortune overnight is a documented industry failure. *Status: built and tested; wiring into the live gateway is the top roadmap item.*
 4. **Git is the authority.** The runtime reads its permissions from files mounted read-only. Changing what an agent may do requires a commit — reviewable, revertable, attributable.
 
 ## Run it
