@@ -110,10 +110,27 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
   }>(join(companyDir, "org.overlay.yaml"));
 
   // ---- loops -------------------------------------------------------------
+  // Core ships generic loops; the OVERLAY may add company-specific ones under
+  // <company>/loops/ — that is where business logic private to one company
+  // lives. A name collision is refused rather than resolved: silently
+  // shadowing a core loop would make "which code ran?" unanswerable.
   const loopsDir = join(CORE, "loops");
+  const companyLoopsDir = join(companyDir, "loops");
+  const loopDirOf: Record<string, string> = {};
   const loops: Record<string, any> = {};
-  for (const name of readdirSync(loopsDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)) {
-    const policyPath = join(loopsDir, name, "policy.yaml");
+  const sources: Array<[string, string]> = [
+    ...readdirSync(loopsDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => [d.name, loopsDir] as [string, string]),
+    ...(existsSync(companyLoopsDir)
+      ? readdirSync(companyLoopsDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => [d.name, companyLoopsDir] as [string, string])
+      : []),
+  ];
+  for (const [name, dir] of sources) {
+    if (loopDirOf[name]) {
+      fail(`loop '${name}' exists in both core and the company overlay — rename the company one; shadowing is refused`);
+      continue;
+    }
+    loopDirOf[name] = dir;
+    const policyPath = join(dir, name, "policy.yaml");
     if (!existsSync(policyPath)) {
       fail(`loop '${name}' has no policy.yaml — every loop must declare its capabilities`);
       continue;
@@ -388,7 +405,7 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
   // the author and the job store is a cache.
   const sensors: any[] = [];
   for (const [loopName, policy] of Object.entries<any>(enabledLoops)) {
-    const sensorPath = join(loopsDir, loopName, "sensor.yaml");
+    const sensorPath = join(loopDirOf[loopName], loopName, "sensor.yaml");
     if (!existsSync(sensorPath)) continue;
     const doc = readYaml<any>(sensorPath);
     for (const sn of doc.sensors ?? []) {
@@ -403,7 +420,10 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
       if (sn.cron) { entry.kind = "cron"; entry.cron = sn.cron; entry.tz = sn.tz; }
       else if (sn.every) { entry.kind = "every"; entry.every = sn.every; }
       else { fail(`loop '${loopName}' sensor '${sn.name}' has neither cron nor every`); continue; }
-      if (sn.condition) entry.trigger_script = join("loops", loopName, sn.condition);
+      if (sn.condition) {
+        const rel = loopDirOf[loopName] === companyLoopsDir ? join("company", "loops") : "loops";
+        entry.trigger_script = join(rel, loopName, sn.condition);
+      }
       if (sn.announce) {
         // The owner's first Slack channel receives the run's final text. The
         // channel ID is company data, so it comes from the overlay, not core.
@@ -455,6 +475,8 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
         delegatesTo.length ? `- **Delegates to:** ${delegatesTo.join(", ")}` : `- **Delegates to:** nobody`,
         ...(owned.length ? [`- **Loops owned:** ${owned.join(", ")}`] : []),
         ``,
+        `- **Company:** see \`COMPANY.md\` in this workspace for who we are and what we sell.`,
+        ``,
         `## Your job`,
         ``,
         isChief
@@ -491,6 +513,16 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
       ].join("\n") + "\n");
     }
 
+    // Company profile, distributed. Agents are sandboxed to their own
+    // workspace, so shared context must be copied in. Always overwritten:
+    // company/profile.md is the source, this is a projection of it.
+    const profileSrc = join(companyDir, "company", "profile.md");
+    if (existsSync(profileSrc)) {
+      writeFileSync(join(dir, "COMPANY.md"),
+        "<!-- GENERATED from company/profile.md — edit THAT file, not this copy. -->\n\n" +
+        readFileSync(profileSrc, "utf8"));
+    }
+
     // Remove the first-run trigger. We supplied the identity, so there is
     // nothing to discover — and BOOTSTRAP.md's own instructions say to delete
     // it once that is done.
@@ -516,7 +548,7 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
       lstatSync(dest).isSymbolicLink();          // migrate away from old links
     if (!isOursOrAbsent) continue;               // hand-authored: never touch
     rmSync(dest, { recursive: true, force: true });
-    cpSync(join(loopsDir, loopName), dest, { recursive: true });
+    cpSync(join(loopDirOf[loopName], loopName), dest, { recursive: true });
     writeFileSync(join(dest, MARKER), "managed by runtime/openclaw/compile.ts — edits here are overwritten; edit loops/ instead\n");
   }
 

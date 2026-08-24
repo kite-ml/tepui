@@ -42,7 +42,10 @@ archetypes:
     title: Analyst
     reports_to: ops
     sandbox: { mode: all, workspace_access: ro }
-    tools: { profile: readonly, deny: [write, edit, apply_patch, exec] }
+    tools:
+      profile: readonly
+      deny: [write, edit, apply_patch, exec]
+      allow: [web_search, web_fetch]   # read-only includes reading the web
     budget: { per_run_usd: 0.25, per_day_usd: 3.00 }
 
   marketing:

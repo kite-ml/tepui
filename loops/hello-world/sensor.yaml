@@ -4,7 +4,7 @@ loop: hello-world
 sensors:
   - name: hello-world-heartbeat
     kind: schedule
-    cron: "*/15 * * * *"
+    cron: "0 * * * *"   # hourly; a demo loop does not need to burn 96 runs/day
     tz: Europe/London
     payload:
       kind: agentTurn

@@ -359,3 +359,32 @@ test("a DISABLED data-handling loop compiles fine on the evaluation tier", async
   rmSync(root, { recursive: true, force: true });
   assert.equal(failures, null, failures?.join("\n"));
 });
+
+test("company overlay may add its own loops; core collisions are refused", async () => {
+  const root = mkdtempSync(join(tmpdir(), "tepui-"));
+  const core = join(root, "core"), company = join(root, "company");
+  mkdirSync(join(core, "loops", "shared"), { recursive: true });
+  mkdirSync(join(company, "loops", "kite-only"), { recursive: true });
+  writeFileSync(join(core, "org.yaml"), JSON.stringify({ ...BASE_ORG,
+    archetypes: { ops: { title: "Ops", sandbox: OK_SANDBOX, tools: { profile: "ops" } } } }));
+  writeFileSync(join(core, "loops", "shared", "policy.yaml"),
+    JSON.stringify({ owner: "ops", capabilities: { credentials: [] } }));
+  writeFileSync(join(company, "loops", "kite-only", "policy.yaml"),
+    JSON.stringify({ owner: "ops", capabilities: { credentials: [] } }));
+  writeFileSync(join(company, "org.overlay.yaml"), JSON.stringify({ ...BASE_OVERLAY,
+    loops: { "kite-only": { enabled: true } },
+    employees: { ops: { archetype: "ops", name: "Ops" } } }));
+  process.env.TEPUI_CORE = core;
+  const { compile } = await import(`../runtime/openclaw/compile.ts?t=${Date.now()}`);
+  const r = compile(company, { outDir: join(company, "generated") });
+  assert.equal(r.loops, 2, "core + company loops both count");
+
+  // now the collision
+  mkdirSync(join(company, "loops", "shared"), { recursive: true });
+  writeFileSync(join(company, "loops", "shared", "policy.yaml"),
+    JSON.stringify({ owner: "ops", capabilities: { credentials: [] } }));
+  let failures: string[] | null = null;
+  try { compile(company, { outDir: join(company, "generated") }); } catch (e: any) { failures = e.failures ?? null; }
+  rmSync(root, { recursive: true, force: true });
+  assert.ok(failures?.some((f) => f.includes("both core and the company overlay")), failures?.join("\n"));
+});

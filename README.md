@@ -28,11 +28,12 @@ There is a longer game too. **The future value of a company will be the context 
 - **Org chart as code.** Describe your agents in `org.yaml`; one command turns that into a running system.
 - **Real permission boundaries.** An agent without a tool never even sees that the tool exists, so it cannot be talked into using it.
 - **Live spending enforcement.** Every model call passes through a local gate with per-agent daily and per-run price caps; over the cap, the call is refused before money moves. Verified live, with the ledger feeding the daily digest.
+- **Quality checks on loop output.** Eval cases state what a loop's reply must and must not contain; `pnpm eval <loop>` runs them live, and a failing loop gets its schedule disabled — a regressed loop must not keep running on a timer.
+- **Your own loops, privately.** Core ships generic loops; your company adds its own under `company/loops/` in the private copy. Same machinery — schedules, budgets, evals — with the business logic staying yours.
 - **Loops that run themselves.** Schedules declared in git are reconciled into the runtime; the daily digest wakes at 07:30, runs its collector, and posts to Slack — reporting failures and *silence* first, because a job that quietly stops is the documented way agent systems rot.
 - **Slack.** One app; you talk to agents in channels.
 - **Deploys anywhere.** The same setup runs on a laptop, a small cloud VM, or a Mac mini.
 
-- automatic quality checks on loop output (`evals/`)
 - a deeper learning step — today agents keep lessons in their `MEMORY.md` (read before every job, one line appended after; your edits always win) and the digest reports what changed; nothing yet rewrites a loop from its own history
 - more loops. Shipping now: `daily-digest`, `content-draft` (drafts only, no publish key), `metrics-digest` (answers questions about data files; ships disabled until you use a commercial model endpoint, because it reads company data), `hello-world`
 
