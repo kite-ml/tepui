@@ -40,8 +40,13 @@ jobs:
           # A bare GCP project id slipped past an earlier version of this list, so the
           # patterns now cover ids and workspace/channel identifiers too, not just names.
           PATTERNS='kiteml|kite-ml|luis\.dintrono|@gmail\.com|POSTHOG_[A-Z_]*=|sk-ant-|ghp_|nvapi-|xox[bap]-[0-9]|xapp-[0-9]|[a-z-]+-[0-9]{6}\b|T0[A-Z0-9]{8}'
+          # Deliberate self-references are allowlisted EXPLICITLY: the check
+          # exists to catch leaks, not the repo's own URL, its attribution
+          # line, or this pattern list itself. Anything else that matches is a
+          # leak until proven otherwise.
+          ALLOWED='workflows/lint\.yml|github\.com/kite-ml/tepui|Built by \[Kite\]\(https://kiteml\.com\)'
           if grep -rInE "$PATTERNS" --include='*.md' --include='*.yaml' --include='*.yml' \
-               --include='*.ts' --include='*.json' . | grep -v '^./docs/' ; then
+               --include='*.ts' --include='*.json' . | grep -v '^./docs/' | grep -vE "$ALLOWED" ; then
             echo "::error::company-specific facts or credentials found in the public core"
             exit 1
           fi
