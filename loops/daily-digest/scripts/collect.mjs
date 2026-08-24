@@ -8,7 +8,7 @@
  * source is itself a silent failure.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,6 +21,19 @@ try { ROOT = execFileSync("git", ["-C", HERE, "rev-parse", "--show-toplevel"], {
 catch { ROOT = resolve(HERE, "../../.."); }
 const COMPANY = process.env.TEPUI_COMPANY ?? join(ROOT, "company");
 const sh = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8", timeout: 20_000 });
+
+// The runtime's exec tool spawns a login shell, which resets PATH — so a bare
+// `openclaw` may resolve against a Node too old for it (observed live, and
+// reported by the digest itself). Resolve both explicitly.
+import { existsSync } from "node:fs";
+function openclaw(args) {
+  const node = existsSync("/tmp/node24/bin/node") ? "/tmp/node24/bin/node" : process.execPath;
+  for (const mjs of [
+    "/opt/homebrew/lib/node_modules/openclaw/openclaw.mjs",
+    "/usr/local/lib/node_modules/openclaw/openclaw.mjs",
+  ]) if (existsSync(mjs)) return sh(node, [mjs, ...args]);
+  return sh("openclaw", args);
+}
 
 const out = [];
 const day = new Date().toISOString().slice(0, 10);
@@ -40,7 +53,7 @@ try {
 
 // ── scheduled jobs: what ran, what failed, what was silent ─────────────────
 try {
-  const jobs = JSON.parse(sh("openclaw", ["cron", "list", "--json"]));
+  const jobs = JSON.parse(openclaw(["cron", "list", "--json"]));
   const list = Array.isArray(jobs) ? jobs : jobs.jobs ?? [];
   const tepui = list.filter((j) =>
     (j.declarationKey ?? j.declaration_key ?? j.name ?? "").startsWith("tepui:"));
