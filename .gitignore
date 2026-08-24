@@ -1,1 +1,31 @@
+node_modules/
+.DS_Store
+
+# ── Secrets. Never committed. ──
+# This file was briefly missing after a subtree split, and .env showed as a
+# stageable untracked file in a fresh clone. Nothing leaked, but the near-miss
+# is why these patterns are anchored several ways rather than assumed.
+.env
+.env.*
+!.env.example
+**/.env
+*.local
+*.pem
+*.key
+
+# ── Runtime-owned. OpenClaw writes these; they are not source. ──
+# Binary SQLite, its WAL, session logs, seeded sandbox workspaces, plugin-cache
+# symlinks. An earlier unanchored pattern matched nothing and 44 files were
+# committed, including the database.
+**/runtime/openclaw/*/state/
+**/runtime/openclaw/local/state/
+
+# ── Generated at runtime ──
+sensors.lock.json
+**/sensors.lock.json
+evals/results/
+**/evals/results/
+
+# Your private overlay. In real use this lives in a separate private repo that
+# adds this one as `upstream`; see company.example/README.md.
 company/
