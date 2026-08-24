@@ -35,7 +35,9 @@ jobs:
       - name: Core must stay company-agnostic
         run: |
           set -e
-          PATTERNS='kiteml|kite-ml|luis\.dintrono|@gmail\.com|POSTHOG_[A-Z_]*=|sk-ant-|ghp_'
+          # A bare GCP project id slipped past an earlier version of this list, so the
+          # patterns now cover ids and workspace/channel identifiers too, not just names.
+          PATTERNS='kiteml|kite-ml|luis\.dintrono|@gmail\.com|POSTHOG_[A-Z_]*=|sk-ant-|ghp_|nvapi-|xox[bap]-[0-9]|xapp-[0-9]|[a-z-]+-[0-9]{6}\b|T0[A-Z0-9]{8}'
           if grep -rInE "$PATTERNS" --include='*.md' --include='*.yaml' --include='*.yml' \
                --include='*.ts' --include='*.json' . | grep -v '^./docs/' ; then
             echo "::error::company-specific facts or credentials found in the public core"

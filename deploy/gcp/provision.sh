@@ -2,23 +2,25 @@
 # Provision the tepui gateway on GCP.
 #
 # This VM runs an agent runtime with exec, reading attacker-influenceable text,
-# on a platform whose own threat model excludes prompt injection. It is being
-# placed in a project that also runs production services. So the network isolation
-# below is not decoration — it is the thing standing between a compromised
-# agent and existing internal services.
+# on a platform whose own threat model excludes prompt injection.
+#
+# If you place it in a project that also runs production services, the network
+# isolation below is not decoration — it is the thing standing between a
+# compromised agent and those services. A separate project is cheaper and
+# stronger; this is the fallback when you cannot have one.
 #
 # Portability constraint: nothing here is GCP-specific except the VM, the
 # network, and the backup bucket. The same docker compose runs on a Mac mini.
 set -euo pipefail
 
-PROJECT="${PROJECT:-<your-gcp-project>}"
+PROJECT="${PROJECT:?set PROJECT to your GCP project id}"
 REGION="${REGION:-us-central1}"
 ZONE="${ZONE:-us-central1-a}"
 NAME="${NAME:-tepui-gateway}"
 NET="${NET:-tepui-vpc}"
 MACHINE="${MACHINE:-e2-medium}"     # 4GB. e2-micro's free tier OOMs the build.
 
-echo "==> dedicated VPC (no peering to 'default', so no path to Kite services)"
+echo "==> dedicated VPC (no peering to 'default', so no path to existing services)"
 gcloud compute networks create "$NET" --project="$PROJECT" \
   --subnet-mode=custom --description="tepui agent runtime — isolated from default" 2>/dev/null || echo "    exists"
 gcloud compute networks subnets create "${NET}-${REGION}" --project="$PROJECT" \
