@@ -6,7 +6,27 @@ A *tepui* is one of the flat-topped table mountains that rise out of the Venezue
 
 That is the job of this repo. It is the platform your company runs on — not a chatbot bolted onto the side of it.
 
-> **Status: pre-alpha.** Design is settled, implementation has not started. See [PLAN.md](PLAN.md).
+> ## Status: Phase 0. Read this before adopting.
+>
+> **What works today**, verified running against a live gateway:
+>
+> - **Org chart as code** — `org.yaml` compiles to runtime config, with six fail-closed invariants and 33 tests
+> - **Capability policy** — enforced by the runtime *before the model call*; a denied tool's schema is never sent
+> - **The intake pattern** — a quarantine agent that holds no credentials and has exactly one read-only tool
+> - **A spend gate** — per-run and per-day caps in integer micro-USD, because the runtime has no dollar cap of its own
+> - **Slack** — one app, channel-routed to agents, over Socket Mode
+> - **Deploy** — a GCP VM with an isolated VPC, or the same compose on a laptop
+>
+> **What is described below but NOT built yet:**
+>
+> - the **learning loop** (`lib/learn/` is an empty directory)
+> - the **eval harness** (`lib/evals/`, likewise)
+> - **decision records** as tooling — the format exists and is in use, the sweep is not
+> - every business loop. `loops/` contains `hello-world` and nothing else
+>
+> So: this is an org-chart compiler and a spend gate for [OpenClaw](https://github.com/openclaw/openclaw), well tested, plus a design for the rest. The three pillars below are the plan. Treat the roadmap as a roadmap.
+>
+> See [PLAN.md](PLAN.md) for the build order and [docs/what-is-openclaw.md](docs/what-is-openclaw.md) for exactly which lines are ours versus the runtime's.
 
 ---
 
