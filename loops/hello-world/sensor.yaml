@@ -19,5 +19,5 @@ sensors:
     condition: scripts/should-run.mjs
     payload:
       kind: agentTurn
-      message: The hello-world condition fired. Report what changed.
+      message: The hello-world condition fired. Reply with one line noting what changed — do not send messages anywhere.
     delivery: none

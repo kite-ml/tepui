@@ -41,11 +41,21 @@ archetypes:
   analyst:
     title: Analyst
     reports_to: ops
-    sandbox: { mode: all, workspace_access: ro }
+    # Sandboxed sessions exclude web tools entirely (observed live: "no
+    # registered tools matched"), and an analyst that cannot look anything up
+    # is not an analyst. Unsandboxed, with the tool DENY list as the boundary —
+    # which is enforced before the model call, the stronger of the two anyway.
+    sandbox: { mode: "off", workspace_access: ro }
+    sandbox_justification: >
+      Read-only research role: needs web reach, which sandboxed sessions do
+      not carry. Cannot write, edit, or exec by tool policy; holds no
+      credentials by default.
     tools:
       profile: readonly
-      deny: [write, edit, apply_patch, exec]
-      allow: [web_search, web_fetch]   # read-only includes reading the web
+      deny: [write, edit, apply_patch, exec, process, browser, message]
+      # An explicit allow REPLACES the profile's toolset, so it must be the
+      # complete list, not an addition — the second half of the live failure.
+      allow: [read, session_status, web_fetch, web_search]
     budget: { per_run_usd: 0.25, per_day_usd: 3.00 }
 
   marketing:
