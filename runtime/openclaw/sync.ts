@@ -9,6 +9,7 @@
  * experiments are not ours to delete.
  */
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,6 +38,15 @@ export function sync(companyDir: string, { dryRun = false } = {}) {
   const existing: any[] = Array.isArray(listRaw) ? listRaw : listRaw.jobs ?? [];
   const keyOf = (j: any) => j.declarationKey ?? j.declaration_key ?? "";
   const tepuiJobs = existing.filter((j) => keyOf(j).startsWith("tepui:"));
+
+  // cron add with an existing --declaration-key is idempotent about IDENTITY
+  // (no duplicates) but does not patch changed fields — a job edited in git
+  // kept its old delivery config, observed live. So each declared spec carries
+  // its own hash in the job description; on mismatch the job is recreated.
+  // Matching jobs are left alone, which also preserves their run history —
+  // the digest's silence detection depends on that history.
+  const byKey = new Map(tepuiJobs.map((j) => [keyOf(j), j]));
+  const specHash = (x: any) => "tepui-spec:" + createHash("sha1").update(JSON.stringify(x)).digest("hex").slice(0, 12);
 
   const actions: string[] = [];
   for (const s of desired) {
@@ -67,7 +77,18 @@ export function sync(companyDir: string, { dryRun = false } = {}) {
     if (s.kind === "cron") { args.push("--cron", s.cron); if (s.tz) args.push("--tz", s.tz); }
     else if (s.kind === "every") { args.push("--every", s.every); }
     if (s.trigger_script) args.push("--trigger-script", join(ROOT, s.trigger_script));
-    actions.push(`apply ${s.key}`);
+    const hash = specHash(s);
+    args.push("--description", hash);
+
+    const existing = byKey.get(s.key);
+    const existingHash = existing?.description ?? existing?.desc ?? "";
+    if (existing && existingHash === hash) { actions.push(`ok ${s.key}`); continue; }
+    if (existing) {
+      actions.push(`recreate ${s.key} (spec changed)`);
+      if (!dryRun) oc(["cron", "rm", existing.id]);
+    } else {
+      actions.push(`add ${s.key}`);
+    }
     if (!dryRun) oc(args);
   }
 
@@ -75,7 +96,7 @@ export function sync(companyDir: string, { dryRun = false } = {}) {
   for (const j of tepuiJobs) {
     if (desiredKeys.has(keyOf(j))) continue;
     actions.push(`remove ${keyOf(j)} (${j.id})`);
-    if (!dryRun) oc(["cron", "rm", "--id", j.id]);
+    if (!dryRun) oc(["cron", "rm", j.id]);
   }
 
   if (!dryRun) {
