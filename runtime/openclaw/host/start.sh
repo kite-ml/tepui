@@ -27,6 +27,34 @@ mkdir -p "$CONFIG_DIR/generated" "$STATE_DIR"
 node "$ROOT/runtime/openclaw/compile.ts" "$COMPANY" \
   --workspace-root "$COMPANY" --out "$CONFIG_DIR/generated"
 
+# The config stub holds no secrets, so it is regenerated every start from the
+# template — no drift, and a fresh machine needs zero hand-editing.
+SLACK_PLUGIN=""
+for CAND in /opt/homebrew/lib/node_modules/@openclaw/slack /usr/local/lib/node_modules/@openclaw/slack; do
+  [[ -d "$CAND" ]] && { SLACK_PLUGIN="$CAND"; break; }
+done
+sed "s|__SLACK_PLUGIN_PATH__|$SLACK_PLUGIN|" \
+  "$ROOT/runtime/openclaw/host/openclaw.json.template" > "$CONFIG_DIR/openclaw.json"
+if [[ -z "$SLACK_PLUGIN" ]]; then
+  echo "⚠ slack plugin not installed — channel will warn until: npm i -g @openclaw/slack@2026.7.1"
+fi
+
+# The budget proxy is the spend gate: every model call passes through it, and
+# the gateway must never start without it — an unmetered gateway is exactly the
+# unattended-burn failure the gate exists to prevent.
+export TEPUI_SPEND_DIR="${TEPUI_SPEND_DIR:-$COMPANY/spend}"
+if lsof -ti:${TEPUI_PROXY_PORT:-18900} >/dev/null 2>&1; then
+  lsof -ti:${TEPUI_PROXY_PORT:-18900} | xargs kill -9; sleep 1
+fi
+nohup node "$ROOT/runtime/openclaw/proxy/budget-proxy.ts" "$COMPANY" > "$STATE_DIR/budget-proxy.log" 2>&1 &
+for _ in $(seq 1 20); do
+  curl -sf "http://127.0.0.1:${TEPUI_PROXY_PORT:-18900}/healthz" >/dev/null 2>&1 && break
+  sleep 0.5
+done
+curl -sf "http://127.0.0.1:${TEPUI_PROXY_PORT:-18900}/healthz" >/dev/null \
+  || { echo "✗ budget proxy failed to start:"; tail -5 "$STATE_DIR/budget-proxy.log"; exit 1; }
+echo "→ budget proxy up (ledger: $TEPUI_SPEND_DIR)"
+
 docker image inspect openclaw-sandbox:bookworm-slim >/dev/null 2>&1 \
   || { echo "→ building sandbox image (first run only)"; docker build -t openclaw-sandbox:bookworm-slim "$ROOT/runtime/openclaw/sandbox"; }
 
@@ -60,4 +88,6 @@ for _ in $(seq 1 90); do
 done
 grep -q '\[gateway\] ready' "$STATE_DIR/gateway.log" || { echo "✗ timed out"; tail -12 "$STATE_DIR/gateway.log"; exit 1; }
 echo "✓ ready — log: $STATE_DIR/gateway.log"
+echo "→ reconciling sensors into the scheduler"
+node "$ROOT/runtime/openclaw/sync.ts" "$COMPANY" || echo "⚠ sensor sync failed — loops will not run on schedule"
 grep -iE 'slack|channel' "$STATE_DIR/gateway.log" | tail -3 || true

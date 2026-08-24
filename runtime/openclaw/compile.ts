@@ -13,7 +13,7 @@
  *      emitting something permissive. A compiler that warns is a compiler that
  *      gets ignored.
  */
-import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
@@ -75,7 +75,10 @@ const MODEL_COST: Record<string, { input: number; output: number; cacheRead: num
 
 const PROFILE_MAP: Record<string, { profile: string; deny: string[] }> = {
   ops:        { profile: "full",    deny: [] },
-  readonly:   { profile: "minimal", deny: ["write", "edit", "apply_patch", "exec"] },
+  // Based on "coding" rather than "minimal": minimal carries only session_status,
+  // which made a read-only analyst unable to read anything at all. This keeps
+  // file reading and takes away everything that mutates or reaches out.
+  readonly:   { profile: "coding",  deny: ["write", "edit", "apply_patch", "exec", "process", "browser", "message"] },
   authoring:  { profile: "coding",  deny: ["exec", "browser"] },
   quarantine: { profile: "minimal", deny: ["exec", "write", "edit", "apply_patch", "message", "browser", "web_fetch"] },
   coding:     { profile: "coding",  deny: [] },
@@ -91,7 +94,7 @@ function emit(path: string, value: unknown, source: string) {
   writeFileSync(path, banner + JSON.stringify(value, null, 2) + "\n");
 }
 
-export function compile(companyDir: string, opts: { workspaceRoot?: string; outDir?: string } = {}) {
+export function compile(companyDir: string, opts: { workspaceRoot?: string; outDir?: string; direct?: boolean } = {}) {
   const failures: string[] = [];
   const fail = (msg: string) => failures.push(msg);
 
@@ -126,6 +129,14 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
       }
     }
   }
+
+  // A loop exists in core; the OVERLAY decides whether this company runs it.
+  // Disabled loops still get validated (broken core is broken core) but are
+  // excluded from skills, sensors, and the evaluation-tier data guard — a
+  // disabled loop processes nothing, so it endangers nothing.
+  const enabledLoops = Object.fromEntries(
+    Object.entries(loops).filter(([name]) => overlay.loops?.[name]?.enabled),
+  );
 
   // Credentials actually used, by owning agent.
   const credentialsNeededBy = new Map<string, Set<string>>();
@@ -203,8 +214,16 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
     const fallbacks = startIdx >= 0
       ? TIER_ORDER.slice(startIdx + 1).map((t) => overlay.tiers[t]).filter((m): m is string => Boolean(m) && m !== primary)
       : [];
-    const model = fallbacks.length ? { primary, fallbacks } : primary;
-    const utility = overlay.tiers[merged.utility_model!] ?? merged.utility_model;
+    // Under the budget proxy every agent has its own provider id, so the
+    // model strings are rewritten to route through it.
+    const reProvider = (full: string) =>
+      !opts.direct && overlay.provider && full.startsWith(`${overlay.provider.id}/`)
+        ? `${overlay.provider.id}-${id}/${full.slice(overlay.provider.id.length + 1)}`
+        : full;
+    const model = fallbacks.length
+      ? { primary: reProvider(primary), fallbacks: fallbacks.map(reProvider) }
+      : reProvider(primary);
+    const utilityRaw = overlay.tiers[merged.utility_model!] ?? merged.utility_model;
 
     // reports_to compiles into delegation allowlists — the org chart made real.
     const reports = Object.entries(overlay.employees)
@@ -218,7 +237,7 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
       workspace: `${wsRoot}/agents/${id}`,
       agentDir: `${wsRoot}/agents/${id}/.agent`,
       model,
-      utilityModel: utility,
+      utilityModel: reProvider(utilityRaw),
       sandbox: { mode: merged.sandbox?.mode, backend: "docker", workspaceAccess: merged.sandbox?.workspace_access },
       // An explicit list REPLACES the runtime defaults entirely, which is why
       // every agent gets an exhaustive one and inherits nothing.
@@ -253,7 +272,7 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
   // data and prohibits personal/financial information — a company OS is made
   // of exactly that. This turns "switch before it matters" into a build error.
   if (overlay.provider?.tier === "evaluation") {
-    for (const [loopName, policy] of Object.entries<any>(loops)) {
+    for (const [loopName, policy] of Object.entries<any>(enabledLoops)) {
       if (policy.handles_company_data) {
         fail(`loop '${loopName}' is marked handles_company_data but provider '${overlay.provider.id}' is tier=evaluation. ` +
              `Its ToS permits internal testing only, collects prompts and outputs as training data, and prohibits ` +
@@ -363,6 +382,32 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
   const unaddressable = Object.keys(overlay.employees).filter((id) => !routed.has(id) && delegable.has(id));
   const unreachable = Object.keys(overlay.employees).filter((id) => !routed.has(id) && !delegable.has(id));
 
+  // ---- sensors -----------------------------------------------------------
+  // Normalized schedule declarations for enabled loops. sync.ts converges
+  // these into the runtime's cron store using --declaration-key, so git stays
+  // the author and the job store is a cache.
+  const sensors: any[] = [];
+  for (const [loopName, policy] of Object.entries<any>(enabledLoops)) {
+    const sensorPath = join(loopsDir, loopName, "sensor.yaml");
+    if (!existsSync(sensorPath)) continue;
+    const doc = readYaml<any>(sensorPath);
+    for (const sn of doc.sensors ?? []) {
+      if (!sn.name) { fail(`loop '${loopName}' has a sensor with no name`); continue; }
+      const entry: any = {
+        key: `tepui:${loopName}:${sn.name}`,
+        loop: loopName,
+        agent: policy.owner,
+        session: sn.session ?? "isolated",
+        message: sn.payload?.message ?? `Run the ${loopName} loop.`,
+      };
+      if (sn.cron) { entry.kind = "cron"; entry.cron = sn.cron; entry.tz = sn.tz; }
+      else if (sn.every) { entry.kind = "every"; entry.every = sn.every; }
+      else { fail(`loop '${loopName}' sensor '${sn.name}' has neither cron nor every`); continue; }
+      if (sn.condition) entry.trigger_script = join("loops", loopName, sn.condition);
+      sensors.push(entry);
+    }
+  }
+
   if (failures.length) throw new CompileError(failures);
 
   // ---- standing orders ----------------------------------------------------
@@ -399,6 +444,7 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
         `- **Name:** ${emp.name}`,
         `- **Role:** ${arch.title}`,
         `- **Reports to:** ${arch.reports_to ?? "the human operator"}`,
+        ...((emp.slack_channels ?? []).length ? [`- **Slack channels:** ${(emp.slack_channels ?? []).join(", ")}`] : []),
         delegatesTo.length ? `- **Delegates to:** ${delegatesTo.join(", ")}` : `- **Delegates to:** nobody`,
         ...(owned.length ? [`- **Loops owned:** ${owned.join(", ")}`] : []),
         ``,
@@ -420,6 +466,14 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
         `Do not ask for a restriction to be lifted and do not work around one. A`,
         `missing tool is a decision recorded in \`org.yaml\`, not an accident.`,
         ``,
+        `## Learning`,
+        ``,
+        `Before starting a job, skim \`MEMORY.md\` — lessons from past runs live there.`,
+        `When a run teaches you something a future run should know — a preference,`,
+        `a correction, a data quirk — append one short factual line to \`MEMORY.md\``,
+        `under a heading named after the job. A human may edit or delete anything`,
+        `there; their edits always win.`,
+        ``,
         `## How to behave`,
         ``,
         `- Be brief. You are talking to two busy people, usually in Slack.`,
@@ -435,6 +489,21 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
     // it once that is done.
     const boot = join(dir, "BOOTSTRAP.md");
     if (existsSync(boot)) rmSync(boot);
+  }
+
+  // ---- loop skill links ----------------------------------------------------
+  // SKILL.md files live in core loops/, but the runtime only discovers skills
+  // inside an agent's workspace. Each enabled loop is therefore linked into its
+  // owner's workspace skills dir, with a RELATIVE symlink so the same link
+  // works in the template and in a private copy (identical layout).
+  for (const [loopName, policy] of Object.entries<any>(enabledLoops)) {
+    const skillsDir = join(companyDir, "agents", policy.owner, "skills");
+    mkdirSync(skillsDir, { recursive: true });
+    const linkPath = join(skillsDir, loopName);
+    if (!existsSync(linkPath)) {
+      // company/agents/<owner>/skills/<loop> -> ../../../../loops/<loop>
+      symlinkSync(join("..", "..", "..", "..", "loops", loopName), linkPath);
+    }
   }
 
   const outDir = opts.outDir ?? join(companyDir, "generated");
@@ -458,6 +527,7 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
   }, src);
   emit(join(outDir, "skills.json5"), { entries: skills }, src);
   emit(join(outDir, "bindings.json5"), bindings, src);
+  emit(join(outDir, "sensors.json"), sensors, src);
   if (Object.keys(slackAccounts).length || Object.keys(slackChannels).length) {
     emit(join(outDir, "channels.json5"), {
       slack: {
@@ -480,24 +550,38 @@ export function compile(companyDir: string, opts: { workspaceRoot?: string; outD
   if (overlay.provider) {
     const p = overlay.provider;
     const modelIds = [...new Set(Object.values(overlay.tiers))];
-    emit(join(outDir, "models.json5"), {
-      providers: {
-        [p.id]: {
+    const modelList = modelIds.map((full) => {
+      const id = full.startsWith(`${p.id}/`) ? full.slice(p.id.length + 1) : full;
+      return { id, name: id, contextTokens: MODEL_CONTEXT[full] ?? 128_000, cost: MODEL_COST[full] ?? UNPRICED };
+    });
+    // Reasoning models stream long before the first token and blow through the
+    // ~120s default idle watchdog ("produced no reply ... retrying"), silently
+    // doubling spend. Observed live on nemotron-3-super.
+    const timeoutSeconds = p.timeout_seconds ?? 600;
+
+    if (opts.direct) {
+      // Escape hatch for debugging the provider itself, WITHOUT the spend gate.
+      emit(join(outDir, "models.json5"), {
+        providers: { [p.id]: { api: p.api, baseUrl: p.base_url, apiKey: `\${${p.api_key_env}}`, timeoutSeconds, models: modelList } },
+      }, src + " (--direct: NO BUDGET ENFORCEMENT)");
+    } else {
+      // Default: every agent gets its own provider entry pointing at the local
+      // budget proxy, whose URL path carries the agent identity. This is how
+      // the spend gate meters per agent — the model call cannot bypass it
+      // because this is the only baseUrl the runtime knows.
+      const proxyPort = Number(process.env.TEPUI_PROXY_PORT ?? 18900);
+      const providers: Record<string, any> = {};
+      for (const id of Object.keys(agents)) {
+        providers[`${p.id}-${id}`] = {
           api: p.api,
-          baseUrl: p.base_url,
+          baseUrl: `http://127.0.0.1:${proxyPort}/a/${id}/v1`,
           apiKey: `\${${p.api_key_env}}`,
-          // Reasoning models stream for a long time before their first token
-          // and blow through the ~120s default idle watchdog, which shows up
-          // as "produced no reply before the idle watchdog; retrying" and
-          // silently doubles your spend. Observed on nemotron-3-super.
-          timeoutSeconds: p.timeout_seconds ?? 600,
-          models: modelIds.map((full) => {
-            const id = full.startsWith(`${p.id}/`) ? full.slice(p.id.length + 1) : full;
-            return { id, name: id, contextTokens: MODEL_CONTEXT[full] ?? 128_000, cost: MODEL_COST[full] ?? UNPRICED };
-          }),
-        },
-      },
-    }, src);
+          timeoutSeconds,
+          models: modelList,
+        };
+      }
+      emit(join(outDir, "models.json5"), { providers }, src);
+    }
   }
   emit(join(outDir, "budgets.json"), { perLoop: Object.fromEntries(Object.entries<any>(loops).map(([n, p]) => [n, p.budget])), perAgent: budgets }, src);
 
@@ -515,7 +599,7 @@ const args = process.argv.slice(2);
 const companyDir = resolve(args.find((a) => !a.startsWith("--")) ?? "./company");
 const flag = (n: string) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : undefined; };
 try {
-  const r = compile(companyDir, { workspaceRoot: flag("workspace-root"), outDir: flag("out") });
+  const r = compile(companyDir, { workspaceRoot: flag("workspace-root"), outDir: flag("out"), direct: args.includes("--direct") });
   console.log(`compiled ${r.agents} agents, ${r.loops} loops` + (r.slackAccounts ? `, ${r.slackAccounts} slack app(s)` : "") + ` -> ${companyDir}/generated/`);
   if (r.unaddressable.length) console.log(`  via delegation from the catch-all: ${r.unaddressable.join(", ")}`);
   if (r.unreachable.length) console.log(`  NOT reachable from Slack at all: ${r.unreachable.join(", ")}`);

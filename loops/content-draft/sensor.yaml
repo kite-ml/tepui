@@ -1,0 +1,8 @@
+loop: content-draft
+sensors:
+  - name: weekly
+    kind: schedule
+    cron: "0 9 * * 5"
+    tz: Europe/London
+    payload:
+      message: Run the content-draft loop; pick this week's topic yourself.

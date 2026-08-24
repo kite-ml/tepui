@@ -1,0 +1,12 @@
+loop: metrics-digest
+owner: analyst
+description: Answer questions about data files; weekly change summary.
+capabilities:
+  credentials: []
+# Real company data flows through this loop, so an evaluation-tier model
+# endpoint may not serve it — the compiler enforces that. Ship it disabled;
+# enable after switching to a commercial endpoint.
+handles_company_data: true
+budget:
+  per_run_usd: 0.25
+  per_day_usd: 1.00

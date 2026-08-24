@@ -1,0 +1,16 @@
+{
+  "gateway": { "mode": "local", "bind": "loopback", "port": 18888 },
+
+  "agents": { "$include": "./generated/agents.json5" },
+  "skills": { "$include": "./generated/skills.json5" },
+  "models": { "$include": "./generated/models.json5" },
+  "channels": { "$include": "./generated/channels.json5" },
+  "bindings": { "$include": "./generated/bindings.json5" },
+
+  "plugins": {
+    "load": { "paths": ["__SLACK_PLUGIN_PATH__"] },
+    "entries": { "slack": { "enabled": true } }
+  },
+
+  "cron": { "enabled": true }
+}

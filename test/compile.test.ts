@@ -202,6 +202,7 @@ test("refuses an evaluation-tier provider serving a loop that handles company da
   writeFileSync(join(core, "loops", "crm", "policy.yaml"),
     JSON.stringify({ owner: "ops", handles_company_data: true, capabilities: { credentials: [] } }));
   writeFileSync(join(company, "org.overlay.yaml"), JSON.stringify({ ...BASE_OVERLAY,
+    loops: { crm: { enabled: true } },
     provider: { id: "nvidia", api: "openai-completions", base_url: "https://x/v1", api_key_env: "K", tier: "evaluation" },
     employees: { ops: { archetype: "ops", name: "Ops" } } }));
   process.env.TEPUI_CORE = core;
@@ -331,4 +332,30 @@ test("agents get a tier-descent fallback chain", async () => {
   // contended pool that failed, which is worse than surfacing the error.
   const small = list.find((a: any) => a.id === "small");
   assert.equal(typeof small.model, "string", "tier3 gets no fallback chain");
+});
+
+
+test("a DISABLED data-handling loop compiles fine on the evaluation tier", async () => {
+  // The guard exists to keep company data off an endpoint that trains on it.
+  // A disabled loop processes nothing, so it endangers nothing — this is what
+  // lets core ship data loops that companies enable only after switching to a
+  // commercial endpoint.
+  const root = mkdtempSync(join(tmpdir(), "tepui-"));
+  const core = join(root, "core"), company = join(root, "company");
+  mkdirSync(join(core, "loops", "crm"), { recursive: true });
+  mkdirSync(company, { recursive: true });
+  writeFileSync(join(core, "org.yaml"), JSON.stringify({ ...BASE_ORG,
+    archetypes: { ops: { title: "Ops", sandbox: OK_SANDBOX, tools: { profile: "ops" } } } }));
+  writeFileSync(join(core, "loops", "crm", "policy.yaml"),
+    JSON.stringify({ owner: "ops", handles_company_data: true, capabilities: { credentials: [] } }));
+  writeFileSync(join(company, "org.overlay.yaml"), JSON.stringify({ ...BASE_OVERLAY,
+    loops: { crm: { enabled: false } },
+    provider: { id: "nvidia", api: "openai-completions", base_url: "https://x/v1", api_key_env: "K", tier: "evaluation" },
+    employees: { ops: { archetype: "ops", name: "Ops" } } }));
+  process.env.TEPUI_CORE = core;
+  const { compile } = await import(`../runtime/openclaw/compile.ts?t=${Date.now()}`);
+  let failures: string[] | null = null;
+  try { compile(company, { outDir: join(company, "generated") }); } catch (e: any) { failures = e.failures ?? null; }
+  rmSync(root, { recursive: true, force: true });
+  assert.equal(failures, null, failures?.join("\n"));
 });

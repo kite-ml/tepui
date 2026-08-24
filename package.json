@@ -4,11 +4,18 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "engines": { "node": ">=22.6" },
+  "engines": {
+    "node": ">=22.6"
+  },
   "scripts": {
     "compile": "node runtime/openclaw/compile.ts",
     "lint:compile": "node runtime/openclaw/compile.ts --check",
-    "test": "node --test test/*.test.ts"
+    "test": "node --test test/*.test.ts",
+    "sync": "node runtime/openclaw/sync.ts",
+    "doctor": "bash runtime/openclaw/host/doctor.sh",
+    "start": "bash runtime/openclaw/host/start.sh"
   },
-  "dependencies": { "yaml": "^2.6.1" }
+  "dependencies": {
+    "yaml": "^2.6.1"
+  }
 }

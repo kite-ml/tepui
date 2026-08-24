@@ -1,0 +1,9 @@
+loop: daily-digest
+owner: ops
+description: Morning report of runs, spend, silence, and lessons.
+capabilities:
+  credentials: []
+handles_company_data: false   # summarizes run metadata, not customer data
+budget:
+  per_run_usd: 0.10
+  per_day_usd: 0.50

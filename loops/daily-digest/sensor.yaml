@@ -1,0 +1,11 @@
+loop: daily-digest
+sensors:
+  - name: morning
+    kind: schedule
+    cron: "30 7 * * *"
+    tz: Europe/London
+    # main session: the digest runs where ops talks to you, unsandboxed, so its
+    # collector can read the scheduler state and post to Slack.
+    session: main
+    payload:
+      message: Run the daily-digest loop now.

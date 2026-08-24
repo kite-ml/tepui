@@ -1,0 +1,9 @@
+loop: content-draft
+owner: marketing
+description: One content draft per run, into the drafts folder. Never publishes.
+capabilities:
+  credentials: []
+handles_company_data: false   # drafts from public/internal notes, no customer data
+budget:
+  per_run_usd: 0.15
+  per_day_usd: 0.75

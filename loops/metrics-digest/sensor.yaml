@@ -1,0 +1,8 @@
+loop: metrics-digest
+sensors:
+  - name: weekly
+    kind: schedule
+    cron: "0 8 * * 1"
+    tz: Europe/London
+    payload:
+      message: Run the metrics-digest weekly summary.
