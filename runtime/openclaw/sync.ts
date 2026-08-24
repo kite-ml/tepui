@@ -18,10 +18,15 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
 
 function openclawBin(): string[] {
+  // process.execPath may be a Node too old for openclaw when this script was
+  // launched by an older system node — resolve a pinned Node explicitly, the
+  // same trap the digest collector hit via login-shell PATH resets.
+  const node = ["/tmp/node24/bin/node", "/usr/local/node24/bin/node"].find(existsSync) ?? process.execPath;
   for (const p of [
     "/opt/homebrew/lib/node_modules/openclaw/openclaw.mjs",
     "/usr/local/lib/node_modules/openclaw/openclaw.mjs",
-  ]) if (existsSync(p)) return [process.execPath, p];
+    "/usr/local/node24/lib/node_modules/openclaw/openclaw.mjs",
+  ]) if (existsSync(p)) return [node, p];
   return ["openclaw"];
 }
 

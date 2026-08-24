@@ -22,6 +22,7 @@ function openclawArgs(): string[] {
   for (const p of [
     "/opt/homebrew/lib/node_modules/openclaw/openclaw.mjs",
     "/usr/local/lib/node_modules/openclaw/openclaw.mjs",
+    "/usr/local/node24/lib/node_modules/openclaw/openclaw.mjs",
   ]) if (existsSync(p)) return [process.execPath, p];
   return ["openclaw"];
 }

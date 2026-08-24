@@ -27,10 +27,11 @@ const sh = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8", timeout: 2
 // reported by the digest itself). Resolve both explicitly.
 import { existsSync } from "node:fs";
 function openclaw(args) {
-  const node = existsSync("/tmp/node24/bin/node") ? "/tmp/node24/bin/node" : process.execPath;
+  const node = ["/tmp/node24/bin/node","/usr/local/node24/bin/node"].find(existsSync) ?? process.execPath;
   for (const mjs of [
     "/opt/homebrew/lib/node_modules/openclaw/openclaw.mjs",
     "/usr/local/lib/node_modules/openclaw/openclaw.mjs",
+    "/usr/local/node24/lib/node_modules/openclaw/openclaw.mjs",
   ]) if (existsSync(mjs)) return sh(node, [mjs, ...args]);
   return sh("openclaw", args);
 }
