@@ -12,13 +12,21 @@
 
   "tools": {
     "web": {
-      "search": { "enabled": true }
+      // DuckDuckGo ships in the runtime as a KEYLESS search provider
+      // (requiresCredential: false, "no API key required"). Named explicitly
+      // rather than auto-detected; if a paid key (BRAVE_API_KEY etc) lands in
+      // .env later, switch provider here deliberately — auto-detect prefers
+      // keyed providers and would silently start spending.
+      "search": { "enabled": true, "provider": "duckduckgo" }
     }
   },
 
   "plugins": {
     "load": { "paths": ["__SLACK_PLUGIN_PATH__"] },
-    "entries": { "slack": { "enabled": true } }
+    "entries": {
+      "slack": { "enabled": true },
+      "duckduckgo": { "enabled": true }
+    }
   },
 
   "cron": {
