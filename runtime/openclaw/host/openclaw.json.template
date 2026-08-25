@@ -10,6 +10,12 @@
   "channels": { "$include": "./generated/channels.json5" },
   "bindings": { "$include": "./generated/bindings.json5" },
 
+  "tools": {
+    "web": {
+      "search": { "enabled": true }
+    }
+  },
+
   "plugins": {
     "load": { "paths": ["__SLACK_PLUGIN_PATH__"] },
     "entries": { "slack": { "enabled": true } }
